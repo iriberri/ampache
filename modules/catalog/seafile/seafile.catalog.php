@@ -251,6 +251,11 @@ class Catalog_Seafile extends Catalog
         );
     }
 
+    public function get_virtual_path($path, $file)
+    {
+        return $this->server_uri . '|' . $this->library_name . $path . '|' . $file;
+    }
+
     /**
      * add_to_catalog
      * this function adds new files to an
@@ -318,7 +323,7 @@ class Catalog_Seafile extends Catalog
                 if ($item->type == 'dir') {
                     $count += $this->add_from_directory($client, $library, $path . $item->name . '/');
                 } else if ($item->type == 'file') {
-                    $count += $this->add_file($client, $item);
+                    $count += $this->add_file($client, $library, $item, $path);
                 }
             }
         }
@@ -326,7 +331,7 @@ class Catalog_Seafile extends Catalog
         return $count;
     }
 
-    public function add_file($client, $file)
+    public function add_file($client, $library, $file, $path)
     {
         $filesize = $file->size;
 
@@ -339,11 +344,13 @@ class Catalog_Seafile extends Catalog
             }
 
             if ($is_audio_file && count($this->get_gather_types('music')) > 0) {
-                $this->insert_song($client, $file);
-                return 1;
+                $result = $this->insert_song($client, $library, $file, $path);
+
+                if($result)
+                    return 1;
             } else if ($is_video_file && count($this->get_gather_types('video')) > 0) {
                 // TODO $this->insert_video()
-                return 1;
+                return 0;
             } else {
                 debug_event('read', $data['path'] . " ignored, bad media type for this catalog.", 5);
             }
@@ -359,50 +366,40 @@ class Catalog_Seafile extends Catalog
      *
      * Insert a song that isn't already in the database.
      */
-    private function insert_song($client, $file)
+    private function insert_song($client, $library, $file, $path)
     {
-        if ($this->check_remote_song($this->get_virtual_path($file))) {
+        if ($this->check_remote_song($this->get_virtual_path($path, $file))) {
             debug_event('seafile_catalog', 'Skipping existing song ' . $file, 5);
         } else {
-            $origin  = $file;
-            $islocal = false;
-            $fpchunk = 0;
-            // Get temporary chunked file from Dropbox to (hope) read metadata
-            if ($this->getchunk) {
-                $fpchunk  = tmpfile();
-                $metadata = $client->getFile($file, $fpchunk, null, 40960);
-                if ($metadata == null) {
-                    debug_event('dropbox_catalog', 'Cannot get Dropbox file: ' . $file, 5);
-                }
-                $streammeta = stream_get_meta_data($fpchunk);
-                $file       = $streammeta['uri'];
-                $islocal    = true;
-            }
+            $url = $client['Files']->getDownloadUrl($library, $file, $path);
 
-            $vainfo = new vainfo($file, $this->get_gather_types('music'), '', '', '', $this->sort_pattern, $this->rename_pattern, $islocal);
-            $vainfo->forceSize($filesize);
+            $tempfile  = tmpfile();
+
+            // TODO partial download
+            $client['Files']->client->request('GET', $downloadUrl, ['save_to' => $tempfile])
+
+            $streammeta = stream_get_meta_data($tempfile);
+            $meta       = $streammeta['uri'];
+
+            $vainfo = new vainfo($meta, $this->get_gather_types('music'), '', '', '', $this->sort_pattern, $this->rename_pattern, true);
+            $vainfo->forceSize($file->size);
             $vainfo->get_info();
 
             $key     = vainfo::get_tag_type($vainfo->tags);
-            $results = vainfo::clean_tag_info($vainfo->tags, $key, $file);
+            $results = vainfo::clean_tag_info($vainfo->tags, $key, $file->name);
 
             // Remove temp file
-            if ($fpchunk) {
-                fclose($fpchunk);
+            if ($tempfile) {
+                fclose($tempfile);
             }
 
             // Set the remote path
-            $results['file']    = $origin;
-            $results['catalog'] = $this->id;
+S            $results['catalog'] = $this->id;
 
-            if (!empty($results['artist']) && !empty($results['album'])) {
-                $results['file'] = $this->get_virtual_path($results['file']);
+            $results['file'] = $this->get_virtual_path($results['file']);
 
-                $this->count++;
-                return Song::insert($results);
-            } else {
-                debug_event('results', $results['file'] . " ignored because it is an orphan songs. Please check your catalog patterns.", 5);
-            }
+            $this->count++;
+            return Song::insert($results);
         }
 
         return false;
@@ -461,11 +458,6 @@ class Catalog_Seafile extends Catalog
         }
 
         return false;
-    }
-
-    public function get_virtual_path($file)
-    {
-        return $this->apikey . '|' . $file;
     }
 
     public function get_rel_path($file_path)
