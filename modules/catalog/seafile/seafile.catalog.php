@@ -278,6 +278,11 @@ class Catalog_Seafile extends Catalog
 
         return array('path' => $arr[1], 'filename' => $arr[2]);
     }
+    
+    public function get_rel_path($file_path)
+    {
+        return $this->from_virtual_path($file_path);
+    }
 
     /**
      * add_to_catalog
