@@ -234,7 +234,10 @@ class Catalog_Seafile extends Catalog
         }
     }
 
-    public function createClient()
+    private $client;
+    private $library;
+
+    private function createClient()
     {
         $client = new Client([
             'base_uri' => $this->server_uri,
@@ -244,16 +247,36 @@ class Catalog_Seafile extends Catalog
             ]
         ]);
 
-        return array(
+        $this->client = array(
             'Libraries' => new Library($client),
             'Directories' => new Directory($client),
-            'Files' => new File($client)
+            'Files' => new File($client),
+            'Client' => $client;
         );
     }
 
-    public function get_virtual_path($path, $file)
+    private function findLibrary() {
+        $libraries = $this->client['Libraries']->getAll();
+
+        $library = array_filter($libraries, function($lib) { return $lib->name == $library_name; });
+
+        if(count($library) == 0) {
+            AmpError::add('general', sprintf(T_('No media updated: could not find Seafile library called "%s"')), $library_name);
+        }
+
+        $this->library = $library[0];
+    }
+
+    public function to_virtual_path($path, $filename)
     {
-        return $this->server_uri . '|' . $this->library_name . $path . '|' . $file;
+        return $library->name . '|' . $path . '|' . $file;
+    }
+
+    public function from_virtual_path($file_path)
+    {
+        $arr = explode('|', $file_path)
+
+        return array('path' => $arr[1], 'filename' => $arr[2]);
     }
 
     /**
@@ -286,17 +309,11 @@ class Catalog_Seafile extends Catalog
      */
     private function add_from_library()
     {
-        $client = $this->createClient();
+        $this->createClient();
 
-        $libraries = $client['Libraries']->getAll();
+        $this->findLibrary();
 
-        $library = array_filter($libraries, function($lib) { return $lib->name == $library_name; });
-
-        if(count($library) == 0) {
-            AmpError::add('general', sprintf(T_('No media updated: could not find Seafile library called "%s"')), $library_name);
-        }
-
-        $count = $this->add_from_directory($client, $library[0], '/');
+        $count = $this->add_from_directory('/');
 
         UI::update_text('', sprintf(T_('Catalog Update Finished.  Total Media: [%s]'), $count));
 
@@ -312,18 +329,18 @@ class Catalog_Seafile extends Catalog
      *
      * Recurses through directories and pulls out all media files
      */
-    public function add_from_directory($client, $library, $path)
+    public function add_from_directory($path)
     {
-        $directoryItems = $client['Directories']->getAll($library, $path);
+        $directoryItems = $this->client['Directories']->getAll($this->library, $path);
 
         $count = 0;
 
         if ($directoryItems !== null && count($directoryItems) > 0) {
             foreach ($directoryItems as $item) {
                 if ($item->type == 'dir') {
-                    $count += $this->add_from_directory($client, $library, $path . $item->name . '/');
+                    $count += $this->add_from_directory($path . $item->name . '/');
                 } else if ($item->type == 'file') {
-                    $count += $this->add_file($client, $library, $item, $path);
+                    $count += $this->add_file($item, $path);
                 }
             }
         }
@@ -331,7 +348,7 @@ class Catalog_Seafile extends Catalog
         return $count;
     }
 
-    public function add_file($client, $library, $file, $path)
+    public function add_file($file, $path)
     {
         $filesize = $file->size;
 
@@ -344,7 +361,7 @@ class Catalog_Seafile extends Catalog
             }
 
             if ($is_audio_file && count($this->get_gather_types('music')) > 0) {
-                $result = $this->insert_song($client, $library, $file, $path);
+                $result = $this->insert_song($file, $path);
 
                 if($result)
                     return 1;
@@ -366,17 +383,17 @@ class Catalog_Seafile extends Catalog
      *
      * Insert a song that isn't already in the database.
      */
-    private function insert_song($client, $library, $file, $path)
+    private function insert_song($file, $path)
     {
-        if ($this->check_remote_song($this->get_virtual_path($path, $file))) {
-            debug_event('seafile_catalog', 'Skipping existing song ' . $file, 5);
+        if ($this->check_remote_song($this->to_virtual_path($path, $file->name))) {
+            debug_event('seafile_catalog', 'Skipping existing song ' . $file->name, 5);
         } else {
-            $url = $client['Files']->getDownloadUrl($library, $file, $path);
+            $url = $this->client['Files']->getDownloadUrl($this->library, $file, $path);
 
             $tempfile  = tmpfile();
 
             // TODO partial download
-            $client['Files']->client->request('GET', $downloadUrl, ['save_to' => $tempfile])
+            $this->client['Client']->request('GET', $downloadUrl, ['save_to' => $tempfile, 'headers': []])
 
             $streammeta = stream_get_meta_data($tempfile);
             $meta       = $streammeta['uri'];
@@ -394,9 +411,9 @@ class Catalog_Seafile extends Catalog
             }
 
             // Set the remote path
-S            $results['catalog'] = $this->id;
+            $results['catalog'] = $this->id;
 
-            $results['file'] = $this->get_virtual_path($results['file']);
+            $results['file'] = $this->to_virtual_path($path, $file->name);
 
             $this->count++;
             return Song::insert($results);
@@ -419,24 +436,24 @@ S            $results['catalog'] = $this->id;
     {
         $dead = 0;
 
-        $client = $this->createClient();
-        if ($client != null) {
-            $sql        = 'SELECT `id`, `file` FROM `song` WHERE `catalog` = ?';
-            $db_results = Dba::read($sql, array($this->id));
-            while ($row = Dba::fetch_assoc($db_results)) {
-                debug_event('dropbox-clean', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5, 'ampache-catalog');
-                $file     = $this->get_rel_path($row['file']);
-                $metadata = $client->getMetadata($file);
-                if ($metadata) {
-                    debug_event('dropbox-clean', 'keeping song', 5, 'ampache-catalog');
-                } else {
-                    debug_event('dropbox-clean', 'removing song', 5, 'ampache-catalog');
-                    $dead++;
-                    Dba::write('DELETE FROM `song` WHERE `id` = ?', array($row['id']));
-                }
+        $this->createClient();
+        $this->findLibrary();
+
+        $sql        = 'SELECT `id`, `file` FROM `song` WHERE `catalog` = ?';
+        $db_results = Dba::read($sql, array($this->id));
+        while ($row = Dba::fetch_assoc($db_results)) {
+            debug_event('seafile-clean', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5, 'ampache-catalog');
+            $file     = $this->from_virtual_path($row['file']);
+
+            $exists = $client['Directory']->exists($this->library, $file['filename'], $file['path']);
+
+            if ($exists) {
+                debug_event('seafile-clean', 'keeping song', 5, 'ampache-catalog');
+            } else {
+                debug_event('seafile-clean', 'removing song', 5, 'ampache-catalog');
+                $dead++;
+                Dba::write('DELETE FROM `song` WHERE `id` = ?', array($row['id']));
             }
-        } else {
-            AmpError::add('general', T_('API Error: cannot connect to Dropbox.'));
         }
 
         return $dead;
@@ -460,14 +477,6 @@ S            $results['catalog'] = $this->id;
         return false;
     }
 
-    public function get_rel_path($file_path)
-    {
-        $p = strpos($file_path, "|");
-        if ($p !== false) {
-            $p++;
-        }
-        return substr($file_path, $p);
-    }
 
     /**
      * format
