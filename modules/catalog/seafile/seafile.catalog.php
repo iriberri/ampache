@@ -251,7 +251,7 @@ class Catalog_Seafile extends Catalog
             'Libraries' => new Library($client),
             'Directories' => new Directory($client),
             'Files' => new File($client),
-            'Client' => $client;
+            'Client' => $client
         );
     }
 
@@ -274,7 +274,7 @@ class Catalog_Seafile extends Catalog
 
     public function from_virtual_path($file_path)
     {
-        $arr = explode('|', $file_path)
+        $arr = explode('|', $file_path);
 
         return array('path' => $arr[1], 'filename' => $arr[2]);
     }
@@ -404,7 +404,7 @@ class Catalog_Seafile extends Catalog
         $tempfile  = tmpfile();
 
         // TODO partial download
-        $this->client['Client']->request('GET', $downloadUrl, ['save_to' => $tempfile, 'headers': []])
+        $this->client['Client']->request('GET', $downloadUrl, ['sink' => $tempfile]);
 
         $streammeta = stream_get_meta_data($tempfile);
         $meta       = $streammeta['uri'];
@@ -443,7 +443,7 @@ class Catalog_Seafile extends Catalog
             debug_event('seafile-verify', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5, 'ampache-catalog');
             $fileinfo = $this->from_virtual_path($row['file']);
 
-            $metadata = $this->download_metadata($fileinfo['path'], $fileinfo['filename'])
+            $metadata = $this->download_metadata($fileinfo['path'], $fileinfo['filename']);
 
             if ($metadata) {
                 debug_event('seafile-verify', 'updating song', 5, 'ampache-catalog');
