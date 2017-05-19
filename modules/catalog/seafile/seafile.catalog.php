@@ -298,6 +298,7 @@ class Catalog_Seafile extends Catalog
             UI::show_box_bottom();
         }
 
+        $this->update_last_add();
         return true;
     }
 
@@ -388,33 +389,7 @@ class Catalog_Seafile extends Catalog
         if ($this->check_remote_song($this->to_virtual_path($path, $file->name))) {
             debug_event('seafile_catalog', 'Skipping existing song ' . $file->name, 5);
         } else {
-            $url = $this->client['Files']->getDownloadUrl($this->library, $file, $path);
-
-            $tempfile  = tmpfile();
-
-            // TODO partial download
-            $this->client['Client']->request('GET', $downloadUrl, ['save_to' => $tempfile, 'headers': []])
-
-            $streammeta = stream_get_meta_data($tempfile);
-            $meta       = $streammeta['uri'];
-
-            $vainfo = new vainfo($meta, $this->get_gather_types('music'), '', '', '', $this->sort_pattern, $this->rename_pattern, true);
-            $vainfo->forceSize($file->size);
-            $vainfo->get_info();
-
-            $key     = vainfo::get_tag_type($vainfo->tags);
-            $results = vainfo::clean_tag_info($vainfo->tags, $key, $file->name);
-
-            // Remove temp file
-            if ($tempfile) {
-                fclose($tempfile);
-            }
-
-            // Set the remote path
-            $results['catalog'] = $this->id;
-
-            $results['file'] = $this->to_virtual_path($path, $file->name);
-
+            $results = $this->download_metadata($path, $file);
             $this->count++;
             return Song::insert($results);
         }
@@ -422,9 +397,71 @@ class Catalog_Seafile extends Catalog
         return false;
     }
 
+    private function download_metadata($path, $file)
+    {
+        $url = $this->client['Files']->getDownloadUrl($this->library, $file, $path);
+
+        $tempfile  = tmpfile();
+
+        // TODO partial download
+        $this->client['Client']->request('GET', $downloadUrl, ['save_to' => $tempfile, 'headers': []])
+
+        $streammeta = stream_get_meta_data($tempfile);
+        $meta       = $streammeta['uri'];
+
+        $vainfo = new vainfo($meta, $this->get_gather_types('music'), '', '', '', $this->sort_pattern, $this->rename_pattern, true);
+        $vainfo->forceSize($file->size);
+        $vainfo->get_info();
+
+        $key     = vainfo::get_tag_type($vainfo->tags);
+        $results = vainfo::clean_tag_info($vainfo->tags, $key, $file->name);
+
+        // Remove temp file
+        if ($tempfile) {
+            fclose($tempfile);
+        }
+
+        // Set the remote path
+        $results['catalog'] = $this->id;
+
+        $results['file'] = $this->to_virtual_path($path, $file->name);
+
+        return $results;
+    }
+
     public function verify_catalog_proc()
     {
-        return array('total' => 0, 'updated' => 0);
+        $results = array('total' => 0, 'updated' => 0);
+
+        $this->createClient();
+        $this->findLibrary();
+
+        $sql        = 'SELECT `id`, `file` FROM `song` WHERE `catalog` = ?';
+        $db_results = Dba::read($sql, array($this->id));
+        while ($row = Dba::fetch_assoc($db_results)) {
+            $results['total']++;
+            debug_event('seafile-verify', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5, 'ampache-catalog');
+            $fileinfo = $this->from_virtual_path($row['file']);
+
+            $metadata = $this->download_metadata($fileinfo['path'], $fileinfo['filename'])
+
+            if ($metadata) {
+                debug_event('seafile-verify', 'updating song', 5, 'ampache-catalog');
+                $song = new Song($row['id']);
+                self::update_song_from_tags($metadata, $song);
+                if ($info['change']) {
+                    $results['updated']++;
+                }
+            } else {
+                debug_event('seafile-verify', 'removing song', 5, 'ampache-catalog');
+                $dead++;
+                Dba::write('DELETE FROM `song` WHERE `id` = ?', array($row['id']));
+            }
+        }
+
+        $this->update_last_update();
+
+        return $results;
     }
 
     /**
@@ -455,6 +492,8 @@ class Catalog_Seafile extends Catalog
                 Dba::write('DELETE FROM `song` WHERE `id` = ?', array($row['id']));
             }
         }
+
+        $this->update_last_clean();
 
         return $dead;
     }
@@ -492,7 +531,9 @@ class Catalog_Seafile extends Catalog
 
     public function prepare_media($media)
     {
-        $client = $this->createClient();
+        $this->createClient();
+        $this->findLibrary();
+
         if ($client != null) {
             set_time_limit(0);
 
@@ -500,12 +541,14 @@ class Catalog_Seafile extends Catalog
             $browser    = new Horde_Browser();
             $media_name = $media->f_artist_full . " - " . $media->title . "." . $media->type;
             $browser->downloadHeaders($media_name, $media->mime, false, $media->size);
-            $file = $this->get_rel_path($media->file);
+            $file = $this->from_virtual_path($media->file);
 
             $output   = fopen('php://output', 'w');
-            $metadata = $client->getFile($file, $output);
-            if ($metadata == null) {
-                debug_event('play', 'File not found on Dropbox: ' . $file, 5);
+
+            $response = $client['Files']->downloadFromDir($this->library, $file['path'] . '/' . $file['filename'],  $output);
+
+            if ($response->getStatusCode() != 200) {
+                debug_event('play', 'Unable to download file from Seafile: ' . $file, 5);
             }
             fclose($output);
         }
