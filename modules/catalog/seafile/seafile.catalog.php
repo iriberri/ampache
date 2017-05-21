@@ -426,7 +426,10 @@ class Catalog_Seafile extends Catalog
     {
         if ($this->check_remote_song($this->to_virtual_path($path, $file->name))) {
             debug_event('seafile_catalog', 'Skipping existing song ' . $file->name, 5);
+            UI::update_text('', sprintf(T_('Skipping existing song "%s"'), $file->name));
         } else {
+            UI::update_text('', sprintf(T_('Adding song "%s"'), $file->name));
+            debug_event('seafile_catalog', 'Adding song ' . $file->name, 5);
             $results = $this->download_metadata($path, $file);
             $this->count++;
             return Song::insert($results);
@@ -440,6 +443,8 @@ class Catalog_Seafile extends Catalog
         $url = $this->client['Files']->getDownloadUrl($this->library, $file, $path);
 
         $tempfile  = tmpfile();
+
+        debug_event('seafile_catalog', 'Downloading partial song ' . $file->name, 5);
 
         // TODO partial download
         $this->client['Client']->request('GET', $url, ['sink' => $tempfile, 'curl' => [ CURLOPT_RANGE => '0-40960' ]]);
@@ -481,6 +486,7 @@ class Catalog_Seafile extends Catalog
         while ($row = Dba::fetch_assoc($db_results)) {
             $results['total']++;
             debug_event('seafile-verify', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5, 'ampache-catalog');
+            UI::update_text('', sprintf(T_('Verifying song "%s"'), $row['file']));
             $fileinfo = $this->from_virtual_path($row['file']);
 
             $metadata = $this->download_metadata($fileinfo['path'], $fileinfo['filename']);
@@ -521,15 +527,16 @@ class Catalog_Seafile extends Catalog
         $sql        = 'SELECT `id`, `file` FROM `song` WHERE `catalog` = ?';
         $db_results = Dba::read($sql, array($this->id));
         while ($row = Dba::fetch_assoc($db_results)) {
-            debug_event('seafile-clean', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5, 'ampache-catalog');
+            debug_event('seafile-clean', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5);
             $file     = $this->from_virtual_path($row['file']);
 
             $exists = $this->client['Directories']->exists($this->library, $file['filename'], $file['path']);
 
             if ($exists) {
-                debug_event('seafile-clean', 'keeping song', 5, 'ampache-catalog');
+                debug_event('seafile-clean', 'keeping song', 5);
             } else {
-                debug_event('seafile-clean', 'removing song', 5, 'ampache-catalog');
+                UI::update_text('', sprintf(T_('Removing song "%s"'), $file['filename']));
+                debug_event('seafile-clean', 'removing song', 5);
                 $dead++;
                 Dba::write('DELETE FROM `song` WHERE `id` = ?', array($row['id']));
             }
