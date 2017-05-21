@@ -202,17 +202,12 @@ class Catalog_Seafile extends Catalog
             return false;
         }
 
-        if (!strlen($api_key)) {
-            AmpError::add('general', T_('Error: Could not verify Seafile Server credentials.'));
-            return false;
-        }
-
         if (!strlen($library_name)) {
             AmpError::add('general', T_('Error: Seafile Server Library Name is required.'));
             return false;
         }
 
-        $sql = 'INSERT INTO `' . 'catalog_' . $this->get_type() . '` (`server_uri`, `api_key`, `library_name`, `catalog_id`) VALUES (?, ?, ?, ?)';
+        $sql = 'INSERT INTO `catalog_seafile` (`server_uri`, `api_key`, `library_name`, `catalog_id`) VALUES (?, ?, ?, ?)';
         Dba::write($sql, array($server_uri, $api_key, $library_name, $catalog_id));
         return true;
     }
@@ -239,20 +234,28 @@ class Catalog_Seafile extends Catalog
 
     private function createClient()
     {
-        $client = new Client([
-            'base_uri' => $this->server_uri,
-            'debug' => false,
-            'headers' => [
-                'Authorization' => 'Token ' . $this->api_key
-            ]
-        ]);
+        if(!$this->isReady()) {
+            if($_REQUEST['seafileusername'])
+                $this->perform_ready();
+            else
+                $this->show_ready_process();
+        }
+        else {
+            $client = new Client([
+                'base_uri' => $this->server_uri,
+                'debug' => false,
+                'headers' => [
+                    'Authorization' => 'Token ' . $this->api_key
+                ]
+            ]);
 
-        $this->client = array(
-            'Libraries' => new Library($client),
-            'Directories' => new Directory($client),
-            'Files' => new File($client),
-            'Client' => $client
-        );
+            $this->client = array(
+                'Libraries' => new Library($client),
+                'Directories' => new Directory($client),
+                'Files' => new File($client),
+                'Client' => $client
+            );
+        }
     }
 
     private function findLibrary() {
@@ -278,7 +281,7 @@ class Catalog_Seafile extends Catalog
 
         return array('path' => $arr[1], 'filename' => $arr[2]);
     }
-    
+
     public function get_rel_path($file_path)
     {
         return $this->from_virtual_path($file_path);
@@ -317,17 +320,22 @@ class Catalog_Seafile extends Catalog
     {
         $this->createClient();
 
-        $this->findLibrary();
+        if($this->client != null)
+        {
+            $this->findLibrary();
 
-        $count = $this->add_from_directory('/');
+            $count = $this->add_from_directory('/');
 
-        UI::update_text('', sprintf(T_('Catalog Update Finished.  Total Media: [%s]'), $count));
+            UI::update_text('', sprintf(T_('Catalog Update Finished.  Total Media: [%s]'), $count));
 
-        if ($count == 0) {
-            AmpError::add('general', T_('No media updated, do you respect the patterns?'));
+            if ($count == 0) {
+                AmpError::add('general', T_('No media updated, do you respect the patterns?'));
+            }
+
+                    return true;
         }
 
-        return true;
+        return false;
     }
 
     /**
@@ -439,6 +447,10 @@ class Catalog_Seafile extends Catalog
         $results = array('total' => 0, 'updated' => 0);
 
         $this->createClient();
+
+        if($this->client == null)
+            return $results;
+
         $this->findLibrary();
 
         $sql        = 'SELECT `id`, `file` FROM `song` WHERE `catalog` = ?';
@@ -479,6 +491,10 @@ class Catalog_Seafile extends Catalog
         $dead = 0;
 
         $this->createClient();
+
+        if($this->client == null)
+            return 0;
+
         $this->findLibrary();
 
         $sql        = 'SELECT `id`, `file` FROM `song` WHERE `catalog` = ?';
@@ -537,9 +553,10 @@ class Catalog_Seafile extends Catalog
     public function prepare_media($media)
     {
         $this->createClient();
-        $this->findLibrary();
 
         if ($client != null) {
+            $this->findLibrary();
+
             set_time_limit(0);
 
             // Generate browser class for sending headers
