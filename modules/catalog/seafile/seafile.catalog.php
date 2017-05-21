@@ -544,8 +544,8 @@ class Catalog_Seafile extends Catalog
     public function format()
     {
         parent::format();
-        $this->f_info      = $this->api_key;
-        $this->f_full_info = $this->api_key;
+        $this->f_info      = 'Seafile server "' . $this->server_uri . '", library "' . $this->library_name . '"';
+        $this->f_full_info = 'Seafile server "' . $this->server_uri . '", library "' . $this->library_name . '"';
     }
 
     public function prepare_media($media)
