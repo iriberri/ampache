@@ -133,7 +133,7 @@ class Catalog_Seafile extends Catalog
 
     protected function requestCredentials()
     {
-        echo '<br />' . T_('Enter Seafile Username & Password') . '<br />';
+        echo '<br />' . T_('Enter Seafile Username and Password') . '<br />';
         echo "<form action='" . get_current_path() . "' method='post' enctype='multipart/form-data'>";
         if ($_REQUEST['action']) {
             echo "<input type='hidden' name='action' value='" . scrub_in($_REQUEST['action']) . "' />";
@@ -141,7 +141,7 @@ class Catalog_Seafile extends Catalog
         }
         echo "<input type='hidden' name='perform_ready' value='true' />";
 
-        echo "Username: <input type='text' name='seafileusername' /> ";
+        echo "Username/Email: <input type='text' name='seafileusername' /> ";
         echo "Password: <input type='password' name='seafilepassword' /> ";
 
         echo "<input type='submit' value='" . T_("Connect to Seafile") . "' />";
@@ -170,7 +170,7 @@ class Catalog_Seafile extends Catalog
             )
         );
         $context  = stream_context_create($options);
-        $result = file_get_contents($this->server_uri, false, $context);
+        $result = file_get_contents($this->server_uri. (substr($this->server_uri, -1) == '/' ? '' : '/') . 'api2/auth-token/', false, $context);
 
         if (!$result) {
             AmpError::add('general', T_('Error: Could not authenticate against Seafile API.'));
