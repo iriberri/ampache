@@ -28,6 +28,7 @@
  */
 
 use Seafile\Client\Resource\Directory;
+use Seafile\Client\Type\DirectoryItem;
 use Seafile\Client\Resource\File;
 use Seafile\Client\Resource\Library;
 use Seafile\Client\Http\Client;
@@ -428,11 +429,17 @@ class Catalog_Seafile extends Catalog
             debug_event('seafile_catalog', 'Skipping existing song ' . $file->name, 5);
             UI::update_text('', sprintf(T_('Skipping existing song "%s"'), $file->name));
         } else {
-            UI::update_text('', sprintf(T_('Adding song "%s"'), $file->name));
             debug_event('seafile_catalog', 'Adding song ' . $file->name, 5);
-            $results = $this->download_metadata($path, $file);
-            $this->count++;
-            return Song::insert($results);
+            try {
+                $results = $this->download_metadata($path, $file);
+                $this->count++;
+                UI::update_text('', sprintf(T_('Adding song "%s"'), $file->name));
+                return Song::insert($results);
+            }
+            catch(Exception $e) {
+                debug_event('seafile_add', sprintf('Could not add song "%s"', $file->name), 1);
+                UI::update_text('', sprintf(T_('Could not add song "%s"'), $file->name));
+            }
         }
 
         return false;
@@ -444,14 +451,19 @@ class Catalog_Seafile extends Catalog
 
         debug_event('seafile_catalog', 'Downloading partial song ' . $file->name, 5);
 
-        $tempfile  = tmpfile();
+        $tempname = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $file->name;
 
-        $response = $this->client['Client']->request('GET', $url, ['curl' => [ CURLOPT_RANGE => '0-102400' ]]);
+        $tempfilename = fopen($tempname,'wb');
+
+        // grab a full meg in case meta has image in it or something
+        $response = $this->client['Client']->request('GET', $url, ['curl' => [ CURLOPT_RANGE => '0-1048576' ]]);
 
         fwrite($tempfile, $response->getBody());
 
-        $streammeta = stream_get_meta_data($tempfile);
-        $tempfilename = $streammeta['uri'];
+        // Remove temp file
+        if ($tempfile) {
+            fclose($tempfile);
+        }
 
         $vainfo = new vainfo($tempfilename, $this->get_gather_types('music'), '', '', '', $this->sort_pattern, $this->rename_pattern, true);
         $vainfo->forceSize($file->size);
@@ -460,14 +472,9 @@ class Catalog_Seafile extends Catalog
         $key = vainfo::get_tag_type($vainfo->tags);
 
         // maybe fix stat-ing-nonexistent-file bug?
-        $vainfo->tags['general']['size'] = $file->size;
+        $vainfo->tags['general']['size'] = intval($file->size);
 
         $results = vainfo::clean_tag_info($vainfo->tags, $key, $file->name);
-
-        // Remove temp file
-        if ($tempfile) {
-            fclose($tempfile);
-        }
 
         // Set the remote path
         $results['catalog'] = $this->id;
@@ -488,25 +495,35 @@ class Catalog_Seafile extends Catalog
 
         set_time_limit(0);
 
-        $sql        = 'SELECT `id`, `file` FROM `song` WHERE `catalog` = ?';
+        $sql        = 'SELECT `id`, `file`, title FROM `song` WHERE `catalog` = ?';
         $db_results = Dba::read($sql, array($this->id));
         while ($row = Dba::fetch_assoc($db_results)) {
             $results['total']++;
             debug_event('seafile-verify', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5, 'ampache-catalog');
-            UI::update_text('', sprintf(T_('Verifying song "%s"'), $row['file']));
             $fileinfo = $this->from_virtual_path($row['file']);
 
-            $metadata = $this->download_metadata($fileinfo['path'], $fileinfo['filename']);
+            $dircontents = $this->client['Directories']->getAll($this->library, $fileinfo['path']);
 
-            if ($metadata) {
+            $matches = array_filter($dircontents, function($i) { return $i->name == $fileinfo['filename']; });
+
+            $metadata = null;
+            if(count($matches) > 0)
+                $metadata = $this->download_metadata($fileinfo['path'], $matches[0]);
+
+            if ($metadata != null) {
                 debug_event('seafile-verify', 'updating song', 5, 'ampache-catalog');
                 $song = new Song($row['id']);
                 self::update_song_from_tags($metadata, $song);
                 if ($info['change']) {
+                    UI::update_text('', sprintf(T_('Updated song "%s"'), $row['title']));
                     $results['updated']++;
+                }
+                else {
+                    UI::update_text('', sprintf(T_('Song up to date: "%s"'), $row['title']));
                 }
             } else {
                 debug_event('seafile-verify', 'removing song', 5, 'ampache-catalog');
+                UI::update_text('', sprintf(T_('Removing song "%s"'), $row['title']));
                 $dead++;
                 Dba::write('DELETE FROM `song` WHERE `id` = ?', array($row['id']));
             }
@@ -591,25 +608,39 @@ class Catalog_Seafile extends Catalog
     {
         $this->createClient();
 
-        if ($client != null) {
+        if ($this->client != null) {
             set_time_limit(0);
 
-            // Generate browser class for sending headers
-            $browser    = new Horde_Browser();
-            $media_name = $media->f_artist_full . " - " . $media->title . "." . $media->type;
-            $browser->downloadHeaders($media_name, $media->mime, false, $media->size);
             $file = $this->from_virtual_path($media->file);
 
-            $output   = fopen('php://output', 'w');
+            $item = new DirectoryItem();
+            $item->name = basename($file['filename']);
 
-            $response = $client['Files']->download($this->library, $file['path'] . '/' . $file['filename'],  $output);
+            $url = $this->client['Files']->getDownloadUrl($this->library, $item, $file['path']);
+            $response = $this->client['Client']->request('GET', $url, [ 'delay'=> 0]);
 
             if ($response->getStatusCode() != 200) {
-                debug_event('play', 'Unable to download file from Seafile: ' . $file, 5);
+                debug_event('play', 'Unable to download file from Seafile: ' . $file['filename'], 1);
+                return null;
             }
+
+            $output = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $file['filename'];
+
+            $fout = fopen($output,'wb');
+            fwrite($fout, $response->getBody());
+
+            $streammeta = stream_get_meta_data($output);
+
             fclose($output);
+
+            $media->file = $output;
+            $media->f_file = $file['filename'];
+
+            // in case this didn't get set for some reason
+            if($media->size == 0)
+                $media->size = Core::get_filesize($output);
         }
 
-        return null;
+        return $media;
     }
 }
