@@ -31,6 +31,7 @@ use Seafile\Client\Resource\Directory;
 use Seafile\Client\Resource\File;
 use Seafile\Client\Resource\Library;
 use Seafile\Client\Http\Client;
+use GuzzleHttp\Exception\ClientException;
 
 
 class Catalog_Seafile extends Catalog
@@ -244,6 +245,7 @@ class Catalog_Seafile extends Catalog
             $client = new Client([
                 'base_uri' => $this->server_uri,
                 'debug' => false,
+                'delay' => 250,
                 'headers' => [
                     'Authorization' => 'Token ' . $this->api_key
                 ]
@@ -270,6 +272,29 @@ class Catalog_Seafile extends Catalog
         }
 
         $this->library = $library[0];
+    }
+
+    private function handleApiThrottling($func) {
+        while(true) {
+            try {
+                return $func();
+            }
+            catch(ClientException $e) {
+                if($e->getResponse()->getStatusCode() != 429)
+                    throw $e;
+                else {
+                    $resp = $e->getResponse()->getBody();
+
+                    $error = json_decode($result)->detail;
+
+                    preg_match('(\d+) sec', $error, $matches);
+
+                    $secs = intval($matches[1][0]);
+
+                    sleep($secs + 1);
+                }
+            }
+        }
     }
 
     public function to_virtual_path($path, $filename)
