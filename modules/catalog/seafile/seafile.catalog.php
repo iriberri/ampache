@@ -174,16 +174,18 @@ class Catalog_Seafile extends Catalog
 
         if (!$result) {
             AmpError::add('general', T_('Error: Could not authenticate against Seafile API.'));
+            $this->requestCredentials();
         }
+        else {
+            $token = json_decode($result);
 
-        $token = json_decode($result);
+            $this->api_key = $token->token;
 
-        $this->api_key = $token->token;
+            debug_event('seafile_catalog', 'Retrieved API token for user ' . $username . '.', 1);
 
-        debug_event('seafile_catalog', 'Retrieved API token for user ' . $username . '.', 1);
-
-        $sql = 'UPDATE `' . 'catalog_' . $this->get_type() . '` SET `api_key` = ? WHERE `catalog_id` = ?';
-        Dba::write($sql, array($this->api_key, $this->id));
+            $sql = 'UPDATE `' . 'catalog_' . $this->get_type() . '` SET `api_key` = ? WHERE `catalog_id` = ?';
+            Dba::write($sql, array($this->api_key, $this->id));
+        }
     }
 
     /**
@@ -241,7 +243,7 @@ class Catalog_Seafile extends Catalog
         else {
             $client = new Client([
                 'base_uri' => $this->server_uri,
-                'debug' => true,
+                'debug' => false,
                 'headers' => [
                     'Authorization' => 'Token ' . $this->api_key
                 ]
@@ -253,16 +255,18 @@ class Catalog_Seafile extends Catalog
                 'Files' => new File($client),
                 'Client' => $client
             );
+
+            $this->findLibrary();
         }
     }
 
     private function findLibrary() {
         $libraries = $this->client['Libraries']->getAll();
 
-        $library = array_filter($libraries, function($lib) { return $lib->name == $library_name; });
+        $library = array_filter($libraries, function($lib) { return $lib->name == $this->library_name; });
 
         if(count($library) == 0) {
-            AmpError::add('general', sprintf(T_('No media updated: could not find Seafile library called "%s"')), $library_name);
+            AmpError::add('general', sprintf(T_('No media updated: could not find Seafile library called "%s"')), $this->library_name);
         }
 
         $this->library = $library[0];
@@ -270,7 +274,7 @@ class Catalog_Seafile extends Catalog
 
     public function to_virtual_path($path, $filename)
     {
-        return $library->name . '|' . $path . '|' . $file;
+        return $this->library->name . '|' . $path . '|' . $filename;
     }
 
     public function from_virtual_path($file_path)
@@ -320,8 +324,6 @@ class Catalog_Seafile extends Catalog
 
         if($this->client != null)
         {
-            $this->findLibrary();
-
             $count = $this->add_from_directory('/');
 
             UI::update_text('', sprintf(T_('Catalog Update Finished.  Total Media: [%s]'), $count));
@@ -341,7 +343,7 @@ class Catalog_Seafile extends Catalog
      *
      * Recurses through directories and pulls out all media files
      */
-    public function add_from_directory($path)
+    private function add_from_directory($path)
     {
         $directoryItems = $this->client['Directories']->getAll($this->library, $path);
 
@@ -360,7 +362,7 @@ class Catalog_Seafile extends Catalog
         return $count;
     }
 
-    public function add_file($file, $path)
+    private function add_file($file, $path)
     {
         $filesize = $file->size;
 
@@ -415,7 +417,7 @@ class Catalog_Seafile extends Catalog
         $tempfile  = tmpfile();
 
         // TODO partial download
-        $this->client['Client']->request('GET', $downloadUrl, ['sink' => $tempfile]);
+        $this->client['Client']->request('GET', $url, ['sink' => $tempfile, 'curl' => [ CURLOPT_RANGE => '0-40960' ]]);
 
         $streammeta = stream_get_meta_data($tempfile);
         $meta       = $streammeta['uri'];
@@ -448,8 +450,6 @@ class Catalog_Seafile extends Catalog
 
         if($this->client == null)
             return $results;
-
-        $this->findLibrary();
 
         $sql        = 'SELECT `id`, `file` FROM `song` WHERE `catalog` = ?';
         $db_results = Dba::read($sql, array($this->id));
@@ -493,15 +493,13 @@ class Catalog_Seafile extends Catalog
         if($this->client == null)
             return 0;
 
-        $this->findLibrary();
-
         $sql        = 'SELECT `id`, `file` FROM `song` WHERE `catalog` = ?';
         $db_results = Dba::read($sql, array($this->id));
         while ($row = Dba::fetch_assoc($db_results)) {
             debug_event('seafile-clean', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5, 'ampache-catalog');
             $file     = $this->from_virtual_path($row['file']);
 
-            $exists = $client['Directory']->exists($this->library, $file['filename'], $file['path']);
+            $exists = $this->client['Directories']->exists($this->library, $file['filename'], $file['path']);
 
             if ($exists) {
                 debug_event('seafile-clean', 'keeping song', 5, 'ampache-catalog');
@@ -553,8 +551,6 @@ class Catalog_Seafile extends Catalog
         $this->createClient();
 
         if ($client != null) {
-            $this->findLibrary();
-
             set_time_limit(0);
 
             // Generate browser class for sending headers
