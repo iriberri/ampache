@@ -172,18 +172,18 @@ class Catalog_Seafile extends Catalog
         $context  = stream_context_create($options);
         $result = file_get_contents($this->server_uri, false, $context);
 
-        if ($result === FALSE) {
+        if (!$result) {
             AmpError::add('general', T_('Error: Could not authenticate against Seafile API.'));
         }
 
         $token = json_decode($result);
 
-        $this->api_key = $token;
+        $this->api_key = $token->token;
 
-        debug_event('seafile_catalog', 'Retrieved API token for user ' . $userId . '.', 1);
+        debug_event('seafile_catalog', 'Retrieved API token for user ' . $username . '.', 1);
 
         $sql = 'UPDATE `' . 'catalog_' . $this->get_type() . '` SET `api_key` = ? WHERE `catalog_id` = ?';
-        Dba::write($sql, array($this->authtoken, $this->catalog_id));
+        Dba::write($sql, array($this->api_key, $this->id));
     }
 
     /**
@@ -235,15 +235,13 @@ class Catalog_Seafile extends Catalog
     private function createClient()
     {
         if(!$this->isReady()) {
-            if($_REQUEST['seafileusername'])
-                $this->perform_ready();
-            else
-                $this->show_ready_process();
+            AmpError::add('general', 'Seafile Catalog is not ready.');
+            $this->client = null;
         }
         else {
             $client = new Client([
                 'base_uri' => $this->server_uri,
-                'debug' => false,
+                'debug' => true,
                 'headers' => [
                     'Authorization' => 'Token ' . $this->api_key
                 ]
