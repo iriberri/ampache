@@ -442,21 +442,26 @@ class Catalog_Seafile extends Catalog
     {
         $url = $this->client['Files']->getDownloadUrl($this->library, $file, $path);
 
-        $tempfile  = tmpfile();
-
         debug_event('seafile_catalog', 'Downloading partial song ' . $file->name, 5);
 
-        // TODO partial download
-        $this->client['Client']->request('GET', $url, ['sink' => $tempfile, 'curl' => [ CURLOPT_RANGE => '0-40960' ]]);
+        $tempfile  = tmpfile();
+
+        $response = $this->client['Client']->request('GET', $url, ['curl' => [ CURLOPT_RANGE => '0-102400' ]]);
+
+        fwrite($tempfile, $response->getBody());
 
         $streammeta = stream_get_meta_data($tempfile);
-        $meta       = $streammeta['uri'];
+        $tempfilename = $streammeta['uri'];
 
-        $vainfo = new vainfo($meta, $this->get_gather_types('music'), '', '', '', $this->sort_pattern, $this->rename_pattern, true);
+        $vainfo = new vainfo($tempfilename, $this->get_gather_types('music'), '', '', '', $this->sort_pattern, $this->rename_pattern, true);
         $vainfo->forceSize($file->size);
         $vainfo->get_info();
 
-        $key     = vainfo::get_tag_type($vainfo->tags);
+        $key = vainfo::get_tag_type($vainfo->tags);
+
+        // maybe fix stat-ing-nonexistent-file bug?
+        $vainfo->tags['general']['size'] = $file->size;
+
         $results = vainfo::clean_tag_info($vainfo->tags, $key, $file->name);
 
         // Remove temp file
@@ -480,6 +485,8 @@ class Catalog_Seafile extends Catalog
 
         if($this->client == null)
             return $results;
+
+        set_time_limit(0);
 
         $sql        = 'SELECT `id`, `file` FROM `song` WHERE `catalog` = ?';
         $db_results = Dba::read($sql, array($this->id));
@@ -523,6 +530,8 @@ class Catalog_Seafile extends Catalog
 
         if($this->client == null)
             return 0;
+
+        set_time_limit(0);
 
         $sql        = 'SELECT `id`, `file` FROM `song` WHERE `catalog` = ?';
         $db_results = Dba::read($sql, array($this->id));
@@ -593,7 +602,7 @@ class Catalog_Seafile extends Catalog
 
             $output   = fopen('php://output', 'w');
 
-            $response = $client['Files']->downloadFromDir($this->library, $file['path'] . '/' . $file['filename'],  $output);
+            $response = $client['Files']->download($this->library, $file['path'] . '/' . $file['filename'],  $output);
 
             if ($response->getStatusCode() != 200) {
                 debug_event('play', 'Unable to download file from Seafile: ' . $file, 5);
