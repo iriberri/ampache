@@ -456,7 +456,7 @@ class Catalog_Seafile extends Catalog
         $tempfile = fopen($tempfilename,'wb');
 
         // grab a full meg in case meta has image in it or something
-        $response = $this->client['Client']->request('GET', $url, ['curl' => [ CURLOPT_RANGE => '0-1048576' ]]);
+        $response = $this->client['Client']->request('GET', $url, ['curl' => [ CURLOPT_RANGE => '0-2097152' ]]);
 
         fwrite($tempfile, $response->getBody());
 
