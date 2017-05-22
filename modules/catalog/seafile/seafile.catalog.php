@@ -451,19 +451,16 @@ class Catalog_Seafile extends Catalog
 
         debug_event('seafile_catalog', 'Downloading partial song ' . $file->name, 5);
 
-        $tempname = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $file->name;
+        $tempfilename = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $file->name;
 
-        $tempfilename = fopen($tempname,'wb');
+        $tempfile = fopen($tempfilename,'wb');
 
         // grab a full meg in case meta has image in it or something
         $response = $this->client['Client']->request('GET', $url, ['curl' => [ CURLOPT_RANGE => '0-1048576' ]]);
 
         fwrite($tempfile, $response->getBody());
 
-        // Remove temp file
-        if ($tempfile) {
-            fclose($tempfile);
-        }
+        fclose($tempfile);
 
         $vainfo = new vainfo($tempfilename, $this->get_gather_types('music'), '', '', '', $this->sort_pattern, $this->rename_pattern, true);
         $vainfo->forceSize($file->size);
@@ -629,9 +626,7 @@ class Catalog_Seafile extends Catalog
             $fout = fopen($output,'wb');
             fwrite($fout, $response->getBody());
 
-            $streammeta = stream_get_meta_data($output);
-
-            fclose($output);
+            fclose($fout);
 
             $media->file = $output;
             $media->f_file = $file['filename'];
