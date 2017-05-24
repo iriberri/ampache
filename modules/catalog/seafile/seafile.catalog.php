@@ -238,6 +238,9 @@ class Catalog_Seafile extends Catalog
 
     private function createClient()
     {
+        if($this->client)
+            return;
+
         if(!$this->isReady()) {
             AmpError::add('general', 'Seafile Catalog is not ready.');
             $this->client = null;
@@ -445,8 +448,14 @@ class Catalog_Seafile extends Catalog
         return false;
     }
 
-    private function download_metadata($path, $file)
+    private function download_metadata($path, $file, $sort_pattern = '', $rename_pattern = '')
     {
+        // Check for patterns
+        if (!$sort_pattern or !$rename_pattern) {
+            $sort_pattern   = $this->sort_pattern;
+            $rename_pattern = $this->rename_pattern;
+        }
+
         $url = $this->client['Files']->getDownloadUrl($this->library, $file, $path);
 
         debug_event('seafile_catalog', 'Downloading partial song ' . $file->name, 5);
@@ -462,7 +471,7 @@ class Catalog_Seafile extends Catalog
 
         fclose($tempfile);
 
-        $vainfo = new vainfo($tempfilename, $this->get_gather_types('music'), '', '', '', $this->sort_pattern, $this->rename_pattern, true);
+        $vainfo = new vainfo($tempfilename, $this->get_gather_types('music'), '', '', '', $sort_pattern, $rename_pattern, true);
         $vainfo->forceSize($file->size);
         $vainfo->get_info();
 
@@ -529,6 +538,26 @@ class Catalog_Seafile extends Catalog
         $this->update_last_update();
 
         return $results;
+    }
+
+    public function get_media_tags($media, $gather_types, $sort_pattern, $rename_pattern)
+    {
+        $this->createClient();
+
+        if($this->client == null)
+            return null;
+
+        $fileinfo = $this->from_virtual_path($media->file);
+
+        $dircontents = $this->client['Directories']->getAll($this->library, $fileinfo['path']);
+
+        $matches = array_values(array_filter($dircontents, function($i) use (&$fileinfo) { return $i->name == $fileinfo['filename']; }));
+
+        $metadata = null;
+        if(count($matches) > 0)
+            $metadata = $this->download_metadata($fileinfo['path'], $matches[0]);
+
+        return $metadata;
     }
 
     /**
