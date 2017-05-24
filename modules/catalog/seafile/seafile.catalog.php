@@ -266,7 +266,7 @@ class Catalog_Seafile extends Catalog
     private function findLibrary() {
         $libraries = $this->client['Libraries']->getAll();
 
-        $library = array_filter($libraries, function($lib) { return $lib->name == $this->library_name; });
+        $library = array_values(array_filter($libraries, function($lib) { return $lib->name == $this->library_name; }));
 
         if(count($library) == 0) {
             AmpError::add('general', sprintf(T_('No media updated: could not find Seafile library called "%s"')), $this->library_name);
@@ -501,7 +501,7 @@ class Catalog_Seafile extends Catalog
 
             $dircontents = $this->client['Directories']->getAll($this->library, $fileinfo['path']);
 
-            $matches = array_filter($dircontents, function($i) { return $i->name == $fileinfo['filename']; });
+            $matches = array_values(array_filter($dircontents, function($i) use (&$fileinfo) { return $i->name == $fileinfo['filename']; }));
 
             $metadata = null;
             if(count($matches) > 0)
