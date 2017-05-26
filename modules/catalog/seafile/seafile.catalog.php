@@ -586,6 +586,7 @@ class Catalog_Seafile extends Catalog
 
             if ($exists) {
                 debug_event('seafile-clean', 'keeping song', 5);
+                UI::update_text('', sprintf(T_('Keeping song "%s"'), $file['filename']));
             } else {
                 UI::update_text('', sprintf(T_('Removing song "%s"'), $file['filename']));
                 debug_event('seafile-clean', 'removing song', 5);
