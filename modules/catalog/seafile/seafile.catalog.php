@@ -148,8 +148,8 @@ class Catalog_Seafile extends Catalog
         }
         echo "<input type='hidden' name='perform_ready' value='true' />";
 
-        echo "Username/Email: <input type='text' name='seafileusername' /> ";
-        echo "Password: <input type='password' name='seafilepassword' /> ";
+        echo T_("Username/Email") . ": <input type='text' name='seafileusername' required /> ";
+        echo T_("Password") . ": <input type='password' name='seafilepassword' required /> ";
 
         echo "<input type='submit' value='" . T_("Connect to Seafile") . "' />";
         echo "</form>";
@@ -166,32 +166,38 @@ class Catalog_Seafile extends Catalog
 
     protected function requestAuthToken($username, $password)
     {
-        $data = array('username' => $username, 'password' => $password);
+        try {
+            $data = array('username' => $username, 'password' => $password);
 
-        // use key 'http' even if you send the request to https://...
-        $options = array(
-            'http' => array(
-                'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
-                'method'  => 'POST',
-                'content' => http_build_query($data)
-            )
-        );
-        $context  = stream_context_create($options);
-        $result = file_get_contents($this->server_uri. (substr($this->server_uri, -1) == '/' ? '' : '/') . 'api2/auth-token/', false, $context);
+            // use key 'http' even if you send the request to https://...
+            $options = array(
+                'http' => array(
+                    'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
+                    'method'  => 'POST',
+                    'content' => http_build_query($data)
+                )
+            );
+            $context  = stream_context_create($options);
+            $result = file_get_contents($this->server_uri. (substr($this->server_uri, -1) == '/' ? '' : '/') . 'api2/auth-token/', false, $context);
 
-        if (!$result) {
-            AmpError::add('general', T_('Error: Could not authenticate against Seafile API.'));
-            $this->requestCredentials();
+            if (!$result) {
+                AmpError::add('general', T_('Error: Could not authenticate against Seafile API.'));
+                $this->requestCredentials();
+            }
+            else {
+                $token = json_decode($result);
+
+                $this->api_key = $token->token;
+
+                debug_event('seafile_catalog', 'Retrieved API token for user ' . $username . '.', 1);
+
+                $sql = 'UPDATE `' . 'catalog_' . $this->get_type() . '` SET `api_key` = ? WHERE `catalog_id` = ?';
+                Dba::write($sql, array($this->api_key, $this->id));
+            }
         }
-        else {
-            $token = json_decode($result);
-
-            $this->api_key = $token->token;
-
-            debug_event('seafile_catalog', 'Retrieved API token for user ' . $username . '.', 1);
-
-            $sql = 'UPDATE `' . 'catalog_' . $this->get_type() . '` SET `api_key` = ? WHERE `catalog_id` = ?';
-            Dba::write($sql, array($this->api_key, $this->id));
+        catch(Exception $e) {
+            AmpError::add('general', sprintf(T_('Error while authenticating against Seafile API: %s', $e->getMessage()));
+            debug_event('seafile_catalog', 'Exception while Authenticating: ' . $e->getMessage(), 2);
         }
     }
 
@@ -521,7 +527,16 @@ class Catalog_Seafile extends Catalog
             debug_event('seafile-verify', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5, 'ampache-catalog');
             $fileinfo = $this->from_virtual_path($row['file']);
 
-            $dircontents = $this->throttleCheck(function() use ($fileinfo) { return $this->client['Directories']->getAll($this->library, $fileinfo['path']); });
+            try {
+                $dircontents = $this->throttleCheck(function() use ($fileinfo) { return $this->client['Directories']->getAll($this->library, $fileinfo['path']); });
+            }
+            catch(ClientException $e) {
+                // API throws 404 if path has been deleted
+                if($e->getResponse()->getStatusCode() == 404)
+                    $dircontents = array();
+                else
+                    throw $e;
+            }
 
             $matches = array_values(array_filter($dircontents, function($i) use (&$fileinfo) { return $i->name == $fileinfo['filename']; }));
 
