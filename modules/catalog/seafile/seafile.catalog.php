@@ -588,6 +588,40 @@ class Catalog_Seafile extends Catalog
         return $metadata;
     }
 
+    private $path_cache;
+    private function file_exists($path, $filename) {
+        if($this->path_cache == null)
+            $path_cache = array();
+
+        if(array_key_exists($path, $path_cache)) {
+            $dir = $path_cache[$path];
+        }
+        else {
+            try {
+                $dir = $this->throttleCheck(function() use ($path) { return $this->client['Directories']->getAll($this->library, $path); });
+                $path_cache[$path] = $dir;
+            }
+            catch(ClientException $e) {
+                if($e->getResponse()->getStatusCode() == 404)
+                    $dir[$path] = false;
+                else {
+                    throw $e;
+                }
+            }
+        }
+
+        if($dir === false)
+            return $dir;
+
+        foreach ($dir as $f) {
+            if ($f->name === $filename) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * clean_catalog_proc
      *
@@ -610,21 +644,14 @@ class Catalog_Seafile extends Catalog
             debug_event('seafile-clean', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5);
             $file     = $this->from_virtual_path($row['file']);
 
-            $exists = true;
-
             try {
-                $exists = $this->throttleCheck(function() use ($file) { return $this->client['Directories']->exists($this->library, $file['filename'], $file['path']); });
-            }
-            catch(ClientException $e) {
-                // API throws 404 if path has been deleted
-                if($e->getResponse()->getStatusCode() == 404)
-                    $exists = false;
-                else
-                    throw $e;
+                $exists = $this->file_exists($file['path'], $file['filename']);
             }
             catch(Exception $e) {
                 UI::update_text('', sprintf(T_('Error checking song "%s": %s'), $file['filename'], $e->getMessage()));
                 debug_event('seafile-clean', 'Exception: ' . $e->getMessage(), 2);
+
+                continue;
             }
 
             if ($exists) {
