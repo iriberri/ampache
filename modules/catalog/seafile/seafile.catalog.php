@@ -43,7 +43,8 @@ class Catalog_Seafile extends Catalog
 
     public $server_uri;
     public $api_key;
-    public $library_name; // TODO
+    public $library_name;
+    public $api_call_delay;
 
     /**
      * get_description
@@ -79,10 +80,12 @@ class Catalog_Seafile extends Catalog
     public function get_create_help()
     {
         $help = "<ul><li>" . T_("Install a Seafile server per its documentation (https://www.seafile.com/)") . "</li>" .
-            "<li>" . T_("") . "</li>" .
-            "<li>" . T_("If desired, create a user for Ampache and share with it the Library you want it to use. Otherwise, you can use your own credentials (not recommended).") . "</li>" .
-            "<li>" . T_("Enter username and password below.") . "</li>" .
-            "<li>&rArr;&nbsp;" . T_("After preparing the catalog with pressing the 'Add catalog' button,<br /> you have to 'Make it ready' on the catalog table.") . "</li></ul>";
+            "<li>" . T_("Enter url to server (e.g. &ldquo;https://seafile.example.com&rdquo;) and library name (e.g. &ldquo;Music&rdquo;).") . "</li>" .
+            "<li>" . T_("'API Call Delay' is delay inserted between repeated requests to Seafile (such as during an Add or Clean action) to accomodate Seafile's Rate Limiting. ")
+                   . T_("The default is tuned towards Seafile's default rate limit settings; see ")
+                   . '<a href="https://forum.syncwerk.com/t/too-many-requests-when-using-web-api-status-code-429/2330">' . T_("this forum post") . '</a>'
+                   . T_(" for instuctions on changing it.") . "</li>" .
+            "<li>&rArr;&nbsp;" . T_("After preparing the catalog with pressing the 'Add catalog' button,<br /> you must 'Make it ready' on the catalog table.") . "</li></ul>";
         return $help;
     } // get_create_help
 
@@ -108,6 +111,7 @@ class Catalog_Seafile extends Catalog
             "`server_uri` VARCHAR( 255 ) COLLATE utf8_unicode_ci NOT NULL , " .
             "`api_key` VARCHAR( 100 ) COLLATE utf8_unicode_ci NOT NULL , " .
             "`library_name` VARCHAR( 255 ) COLLATE utf8_unicode_ci NOT NULL , " .
+            "`api_call_delay` INT NOT NULL , " .
             "`catalog_id` INT( 11 ) NOT NULL" .
             ") ENGINE = MYISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci";
         $db_results = Dba::query($sql);
@@ -118,7 +122,8 @@ class Catalog_Seafile extends Catalog
     public function catalog_fields()
     {
         $fields['server_uri'] = array('description' => T_('Server URI'), 'type'=>'text', 'value' => 'https://seafile.example.org/');
-        $fields['library_name'] = array('description' => T_('Library Name'), 'type'=>'text');
+        $fields['library_name'] = array('description' => T_('Library Name'), 'type'=>'text', 'value' => 'Music');
+        $fields['api_call_delay'] = array('description' => T_('API Call Delay'), 'type'=>'number', 'value' => '250');
 
         return $fields;
     }
@@ -200,6 +205,7 @@ class Catalog_Seafile extends Catalog
         $server_uri = trim($data['server_uri']);
         $api_key    = trim($data['api_key']);
         $library_name = trim($data['library_name']);
+        $api_call_delay = trim($data['api_call_delay']);
 
         if (!strlen($server_uri)) {
             AmpError::add('general', T_('Error: Seafile Server URL is required.'));
@@ -211,8 +217,13 @@ class Catalog_Seafile extends Catalog
             return false;
         }
 
-        $sql = 'INSERT INTO `catalog_seafile` (`server_uri`, `api_key`, `library_name`, `catalog_id`) VALUES (?, ?, ?, ?)';
-        Dba::write($sql, array($server_uri, $api_key, $library_name, $catalog_id));
+        if (!is_numeric($api_call_delay)) {
+            AmpError::add('general', T_('Error: API Call Delay must have a numeric value.'));
+            return false;
+        }
+
+        $sql = 'INSERT INTO `catalog_seafile` (`server_uri`, `api_key`, `library_name`, `api_call_delay`, `catalog_id`) VALUES (?, ?, ?, ?, ?)';
+        Dba::write($sql, array($server_uri, $api_key, $library_name, intval($api_call_delay), $catalog_id));
         return true;
     }
 
@@ -249,7 +260,7 @@ class Catalog_Seafile extends Catalog
             $client = new Client([
                 'base_uri' => $this->server_uri,
                 'debug' => false,
-                'delay' => 250,
+                'delay' => $this->api_call_delay,
                 'headers' => [
                     'Authorization' => 'Token ' . $this->api_key
                 ]
