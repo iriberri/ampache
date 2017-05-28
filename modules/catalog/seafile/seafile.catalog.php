@@ -277,27 +277,13 @@ class Catalog_Seafile extends Catalog
         }
     }
 
-    private function findLibrary() {
-        $libraries = $this->client['Libraries']->getAll();
-
-        $library = array_values(array_filter($libraries, function($lib) { return $lib->name == $this->library_name; }));
-
-        if(count($library) == 0) {
-            AmpError::add('general', sprintf(T_('No media updated: could not find Seafile library called "%s"')), $this->library_name);
-        }
-
-        $this->library = $library[0];
-    }
-
-    private function handleApiThrottling($func) {
+    private function throttleCheck($func) {
         while(true) {
             try {
                 return $func();
             }
             catch(ClientException $e) {
-                if($e->getResponse()->getStatusCode() != 429)
-                    throw $e;
-                else {
+                if($e->getResponse()->getStatusCode() == 429) {
                     $resp = $e->getResponse()->getBody();
 
                     $error = json_decode($result)->detail;
@@ -306,10 +292,26 @@ class Catalog_Seafile extends Catalog
 
                     $secs = intval($matches[1][0]);
 
+                    debug_event('seafile-catalog', sprintf('Throttled by Seafile, waiting %d seconds.', $secs), 5);
                     sleep($secs + 1);
+                }
+                else {
+                    throw $e;
                 }
             }
         }
+    }
+
+    private function findLibrary() {
+        $libraries = $this->throttleCheck(function() { return $this->client['Libraries']->getAll(); });
+
+        $library = array_values(array_filter($libraries, function($lib) { return $lib->name == $this->library_name; }));
+
+        if(count($library) == 0) {
+            AmpError::add('general', sprintf(T_('No media updated: could not find Seafile library called "%s"'), $this->library_name));
+        }
+
+        $this->library = $library[0];
     }
 
     public function to_virtual_path($path, $filename)
@@ -385,7 +387,7 @@ class Catalog_Seafile extends Catalog
      */
     private function add_from_directory($path)
     {
-        $directoryItems = $this->client['Directories']->getAll($this->library, $path);
+        $directoryItems = $this->throttleCheck(function() use ($path) { return $this->client['Directories']->getAll($this->library, $path); });
 
         $count = 0;
 
@@ -467,7 +469,7 @@ class Catalog_Seafile extends Catalog
             $rename_pattern = $this->rename_pattern;
         }
 
-        $url = $this->client['Files']->getDownloadUrl($this->library, $file, $path);
+        $url = $this->throttleCheck(function() use ($file, $path) { return $this->client['Files']->getDownloadUrl($this->library, $file, $path); });
 
         debug_event('seafile_catalog', 'Downloading partial song ' . $file->name, 5);
 
@@ -475,8 +477,8 @@ class Catalog_Seafile extends Catalog
 
         $tempfile = fopen($tempfilename,'wb');
 
-        // grab a full meg in case meta has image in it or something
-        $response = $this->client['Client']->request('GET', $url, ['curl' => [ CURLOPT_RANGE => '0-2097152' ]]);
+        // grab a full 2 meg in case meta has image in it or something
+        $response = $this->throttleCheck(function() use ($url) { return $this->client['Client']->request('GET', $url, ['curl' => [ CURLOPT_RANGE => '0-2097152' ]]); });
 
         fwrite($tempfile, $response->getBody());
 
@@ -519,7 +521,7 @@ class Catalog_Seafile extends Catalog
             debug_event('seafile-verify', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5, 'ampache-catalog');
             $fileinfo = $this->from_virtual_path($row['file']);
 
-            $dircontents = $this->client['Directories']->getAll($this->library, $fileinfo['path']);
+            $dircontents = $this->throttleCheck(function() use ($fileinfo) { return $this->client['Directories']->getAll($this->library, $fileinfo['path']); });
 
             $matches = array_values(array_filter($dircontents, function($i) use (&$fileinfo) { return $i->name == $fileinfo['filename']; }));
 
@@ -560,7 +562,7 @@ class Catalog_Seafile extends Catalog
 
         $fileinfo = $this->from_virtual_path($media->file);
 
-        $dircontents = $this->client['Directories']->getAll($this->library, $fileinfo['path']);
+        $dircontents = $this->throttleCheck(function() use ($fileinfo) { return $this->client['Directories']->getAll($this->library, $fileinfo['path']); });
 
         $matches = array_values(array_filter($dircontents, function($i) use (&$fileinfo) { return $i->name == $fileinfo['filename']; }));
 
@@ -596,7 +598,7 @@ class Catalog_Seafile extends Catalog
             $exists = true;
 
             try {
-                $exists = $this->client['Directories']->exists($this->library, $file['filename'], $file['path']);
+                $exists = $this->throttleCheck(function() use ($file) { return $this->client['Directories']->exists($this->library, $file['filename'], $file['path']); });
             }
             catch(ClientException $e) {
                 // API throws 404 if path has been deleted
@@ -669,8 +671,8 @@ class Catalog_Seafile extends Catalog
             $item = new DirectoryItem();
             $item->name = basename($file['filename']);
 
-            $url = $this->client['Files']->getDownloadUrl($this->library, $item, $file['path']);
-            $response = $this->client['Client']->request('GET', $url, [ 'delay'=> 0]);
+            $url = $this->throttleCheck(function() use ($item, $file) { return $this->client['Files']->getDownloadUrl($this->library, $item, $file['path']); });
+            $response = $this->throttleCheck(function() use ($url) { return $this->client['Client']->request('GET', $url, [ 'delay' => 0 ]); });
 
             if ($response->getStatusCode() != 200) {
                 debug_event('play', 'Unable to download file from Seafile: ' . $file['filename'], 1);
