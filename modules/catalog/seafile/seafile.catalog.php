@@ -196,7 +196,7 @@ class Catalog_Seafile extends Catalog
             }
         }
         catch(Exception $e) {
-            AmpError::add('general', sprintf(T_('Error while authenticating against Seafile API: %s', $e->getMessage()));
+            AmpError::add('general', sprintf(T_('Error while authenticating against Seafile API: %s', $e->getMessage())));
             debug_event('seafile_catalog', 'Exception while Authenticating: ' . $e->getMessage(), 2);
         }
     }
