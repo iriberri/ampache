@@ -582,7 +582,22 @@ class Catalog_Seafile extends Catalog
             debug_event('seafile-clean', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5);
             $file     = $this->from_virtual_path($row['file']);
 
-            $exists = $this->client['Directories']->exists($this->library, $file['filename'], $file['path']);
+            $exists = true;
+
+            try {
+                $exists = $this->client['Directories']->exists($this->library, $file['filename'], $file['path']);
+            }
+            catch(ClientException $e) {
+                // API throws 404 if path has been deleted
+                if($e->getResponse()->getStatusCode() == 404)
+                    $exists = false;
+                else
+                    throw $e;
+            }
+            catch(Exception $e) {
+                UI::update_text('', sprintf(T_('Error checking song "%s": %s'), $file['filename'], $e->getMessage()));
+                debug_event('seafile-clean', 'Exception: ' . $e->getMessage(), 2);
+            }
 
             if ($exists) {
                 debug_event('seafile-clean', 'keeping song', 5);
