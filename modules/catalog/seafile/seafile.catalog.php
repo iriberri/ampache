@@ -34,7 +34,6 @@ use Seafile\Client\Resource\Library;
 use Seafile\Client\Http\Client;
 use GuzzleHttp\Exception\ClientException;
 
-
 class Catalog_Seafile extends Catalog
 {
     private $version        = '000001';
@@ -88,6 +87,7 @@ class Catalog_Seafile extends Catalog
                    . '<a href="https://forum.syncwerk.com/t/too-many-requests-when-using-web-api-status-code-429/2330">' . T_("this forum post") . '</a>'
                    . T_(" for instuctions on changing it.") . "</li>" .
             "<li>&rArr;&nbsp;" . T_("After preparing the catalog with pressing the 'Add catalog' button,<br /> you must 'Make it ready' on the catalog table.") . "</li></ul>";
+
         return $help;
     } // get_create_help
 
@@ -124,9 +124,9 @@ class Catalog_Seafile extends Catalog
 
     public function catalog_fields()
     {
-        $fields['server_uri'] = array('description' => T_('Server URI'), 'type'=>'text', 'value' => 'https://seafile.example.org/');
-        $fields['library_name'] = array('description' => T_('Library Name'), 'type'=>'text', 'value' => 'Music');
-        $fields['api_call_delay'] = array('description' => T_('API Call Delay'), 'type'=>'number', 'value' => '250');
+        $fields['server_uri']     = array('description' => T_('Server URI'), 'type' => 'text', 'value' => 'https://seafile.example.org/');
+        $fields['library_name']   = array('description' => T_('Library Name'), 'type' => 'text', 'value' => 'Music');
+        $fields['api_call_delay'] = array('description' => T_('API Call Delay'), 'type' => 'number', 'value' => '250');
 
         return $fields;
     }
@@ -175,19 +175,18 @@ class Catalog_Seafile extends Catalog
             // use key 'http' even if you send the request to https://...
             $options = array(
                 'http' => array(
-                    'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
-                    'method'  => 'POST',
+                    'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+                    'method' => 'POST',
                     'content' => http_build_query($data)
                 )
             );
-            $context  = stream_context_create($options);
-            $result = file_get_contents($this->server_uri . '/api2/auth-token/', false, $context);
+            $context = stream_context_create($options);
+            $result  = file_get_contents($this->server_uri . '/api2/auth-token/', false, $context);
 
             if (!$result) {
                 AmpError::add('general', T_('Error: Could not authenticate against Seafile API.'));
                 $this->request_credentials();
-            }
-            else {
+            } else {
                 $token = json_decode($result);
 
                 $this->api_key = $token->token;
@@ -197,8 +196,7 @@ class Catalog_Seafile extends Catalog
                 $sql = "UPDATE `{$this->table_name}` SET `api_key` = ? WHERE `catalog_id` = ?";
                 Dba::write($sql, array($this->api_key, $this->id));
             }
-        }
-        catch (Exception $e) {
+        } catch (Exception $e) {
             AmpError::add('general', sprintf(T_('Error while authenticating against Seafile API: %s', $e->getMessage())));
             debug_event('seafile_catalog', 'Exception while Authenticating: ' . $e->getMessage(), 2);
         }
@@ -211,28 +209,32 @@ class Catalog_Seafile extends Catalog
      */
     public static function create_type($catalog_id, $data)
     {
-        $server_uri = rtrim(trim($data['server_uri']), '/');
-        $api_key    = trim($data['api_key']);
-        $library_name = trim($data['library_name']);
+        $server_uri     = rtrim(trim($data['server_uri']), '/');
+        $api_key        = trim($data['api_key']);
+        $library_name   = trim($data['library_name']);
         $api_call_delay = trim($data['api_call_delay']);
 
         if (!strlen($server_uri)) {
             AmpError::add('general', T_('Error: Seafile Server URL is required.'));
+
             return false;
         }
 
         if (!strlen($library_name)) {
             AmpError::add('general', T_('Error: Seafile Server Library Name is required.'));
+
             return false;
         }
 
         if (!is_numeric($api_call_delay)) {
             AmpError::add('general', T_('Error: API Call Delay must have a numeric value.'));
+
             return false;
         }
 
         $sql = "INSERT INTO `{$this->table_name}` (`server_uri`, `api_key`, `library_name`, `api_call_delay`, `catalog_id`) VALUES (?, ?, ?, ?, ?)";
         Dba::write($sql, array($server_uri, $api_key, $library_name, intval($api_call_delay), $catalog_id));
+
         return true;
     }
 
@@ -247,7 +249,7 @@ class Catalog_Seafile extends Catalog
             $this->id = intval($catalog_id);
             $info     = $this->get_info($catalog_id);
 
-            foreach ($info as $key=>$value) {
+            foreach ($info as $key => $value) {
                 $this->$key = $value;
             }
         }
@@ -265,8 +267,7 @@ class Catalog_Seafile extends Catalog
         if (!$this->isReady()) {
             AmpError::add('general', 'Seafile Catalog is not ready.');
             $this->client = null;
-        }
-        else {
+        } else {
             $client = new Client([
                 'base_uri' => $this->server_uri,
                 'debug' => false,
@@ -287,12 +288,12 @@ class Catalog_Seafile extends Catalog
         }
     }
 
-    private function throttle_check($func) {
+    private function throttle_check($func)
+    {
         while (true) {
             try {
                 return $func();
-            }
-            catch (ClientException $e) {
+            } catch (ClientException $e) {
                 if ($e->getResponse()->getStatusCode() == 429) {
                     $resp = $e->getResponse()->getBody();
 
@@ -304,20 +305,22 @@ class Catalog_Seafile extends Catalog
 
                     debug_event('seafile-catalog', sprintf('Throttled by Seafile, waiting %d seconds.', $secs), 5);
                     sleep($secs + 1);
-                }
-                else {
+                } else {
                     throw $e;
                 }
             }
         }
     }
 
-    private function find_library() {
+    private function find_library()
+    {
         $libraries = $this->throttle_check(function () {
             return $this->client['Libraries']->getAll();
         });
 
-        $library = array_values(array_filter($libraries, function ($library) { return $library->name == $this->library_name; }));
+        $library = array_values(array_filter($libraries, function ($library) {
+            return $library->name == $this->library_name;
+        }));
 
         if (count($library) == 0) {
             AmpError::add('general', sprintf(T_('No media updated: could not find Seafile library called "%s"'), $this->library_name));
@@ -363,6 +366,7 @@ class Catalog_Seafile extends Catalog
         }
 
         $this->update_last_add();
+
         return true;
     }
 
@@ -376,8 +380,7 @@ class Catalog_Seafile extends Catalog
     {
         $this->create_client();
 
-        if ($this->client != null)
-        {
+        if ($this->client != null) {
             $count = $this->add_from_directory('/');
 
             UI::update_text('', sprintf(T_('Catalog Update Finished.  Total Media: [%s]'), $count));
@@ -386,7 +389,7 @@ class Catalog_Seafile extends Catalog
                 AmpError::add('general', T_('No media updated, do you respect the patterns?'));
             }
 
-                    return true;
+            return true;
         }
 
         return false;
@@ -409,8 +412,7 @@ class Catalog_Seafile extends Catalog
             foreach ($directoryItems as $item) {
                 if ($item->type == 'dir') {
                     $count += $this->add_from_directory($path . $item->name . '/');
-                }
-                else if ($item->type == 'file') {
+                } elseif ($item->type == 'file') {
                     $count += $this->add_file($item, $path);
                 }
             }
@@ -437,16 +439,13 @@ class Catalog_Seafile extends Catalog
                 if ($result) {
                     return 1;
                 }
-            }
-            else if ($is_video_file && count($this->get_gather_types('video')) > 0) {
+            } elseif ($is_video_file && count($this->get_gather_types('video')) > 0) {
                 // TODO $this->insert_video()
                 return 0;
-            }
-            else {
+            } else {
                 debug_event('read', $data['path'] . " ignored, bad media type for this catalog.", 5);
             }
-        }
-        else {
+        } else {
             debug_event('read', $data['path'] . " ignored, 0 bytes", 5);
         }
 
@@ -463,16 +462,15 @@ class Catalog_Seafile extends Catalog
         if ($this->check_remote_song($this->to_virtual_path($path, $file->name))) {
             debug_event('seafile_catalog', 'Skipping existing song ' . $file->name, 5);
             UI::update_text('', sprintf(T_('Skipping existing song "%s"'), $file->name));
-        }
-        else {
+        } else {
             debug_event('seafile_catalog', 'Adding song ' . $file->name, 5);
             try {
                 $results = $this->download_metadata($path, $file);
                 $this->count++;
                 UI::update_text('', sprintf(T_('Adding song "%s"'), $file->name));
+
                 return Song::insert($results);
-            }
-            catch (Exception $e) {
+            } catch (Exception $e) {
                 debug_event('seafile_add', sprintf('Could not add song "%s": %s', $file->name, $e->getMessage()), 1);
                 UI::update_text('', sprintf(T_('Could not add song "%s"'), $file->name));
             }
@@ -497,7 +495,7 @@ class Catalog_Seafile extends Catalog
 
         $tempfilename = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $file->name;
 
-        $tempfile = fopen($tempfilename,'wb');
+        $tempfile = fopen($tempfilename, 'wb');
 
         // grab a full 2 meg in case meta has image in it or something
         $response = $this->throttle_check(function () use ($url) {
@@ -561,12 +559,10 @@ class Catalog_Seafile extends Catalog
                 if ($info['change']) {
                     UI::update_text('', sprintf(T_('Updated song "%s"'), $row['title']));
                     $results['updated']++;
-                }
-                else {
+                } else {
                     UI::update_text('', sprintf(T_('Song up to date: "%s"'), $row['title']));
                 }
-            }
-            else {
+            } else {
                 debug_event('seafile-verify', 'removing song', 5, 'ampache-catalog');
                 UI::update_text('', sprintf(T_('Removing song "%s"'), $row['title']));
                 $dead++;
@@ -608,27 +604,25 @@ class Catalog_Seafile extends Catalog
 
     private $path_cache;
 
-    private function file_if_exists($path, $filename) {
+    private function file_if_exists($path, $filename)
+    {
         if ($this->path_cache == null) {
             $path_cache = array();
         }
 
         if (array_key_exists($path, $path_cache)) {
             $directory = $path_cache[$path];
-        }
-        else {
+        } else {
             try {
                 $directory = $this->throttle_check(function () use ($path) {
                     return $this->client['Directories']->getAll($this->library, $path);
                 });
                 $path_cache[$path] = $directory;
-            }
-            catch (ClientException $e) {
+            } catch (ClientException $e) {
                 if ($e->getResponse()->getStatusCode() == 404) {
                     $path_cache[$path] = false;
-                    $directory = false;
-                }
-                else {
+                    $directory         = false;
+                } else {
                     throw $e;
                 }
             }
@@ -672,8 +666,7 @@ class Catalog_Seafile extends Catalog
 
             try {
                 $exists = $this->file_if_exists($file['path'], $file['filename']) !== null;
-            }
-            catch (Exception $e) {
+            } catch (Exception $e) {
                 UI::update_text('', sprintf(T_('Error checking song "%s": %s'), $file['filename'], $e->getMessage()));
                 debug_event('seafile-clean', 'Exception: ' . $e->getMessage(), 2);
 
@@ -683,8 +676,7 @@ class Catalog_Seafile extends Catalog
             if ($exists) {
                 debug_event('seafile-clean', 'keeping song', 5);
                 UI::update_text('', sprintf(T_('Keeping song "%s"'), $file['filename']));
-            }
-            else {
+            } else {
                 UI::update_text('', sprintf(T_('Removing song "%s"'), $file['filename']));
                 debug_event('seafile-clean', 'removing song', 5);
                 $dead++;
@@ -737,7 +729,7 @@ class Catalog_Seafile extends Catalog
 
             $file = $this->from_virtual_path($media->file);
 
-            $item = new DirectoryItem();
+            $item       = new DirectoryItem();
             $item->name = basename($file['filename']);
 
             $url = $this->throttle_check(function () use ($item, $file) {
@@ -749,17 +741,18 @@ class Catalog_Seafile extends Catalog
 
             if ($response->getStatusCode() != 200) {
                 debug_event('play', 'Unable to download file from Seafile: ' . $file['filename'], 1);
+
                 return null;
             }
 
             $output = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $file['filename'];
 
-            $fout = fopen($output,'wb');
+            $fout = fopen($output, 'wb');
             fwrite($fout, $response->getBody());
 
             fclose($fout);
 
-            $media->file = $output;
+            $media->file   = $output;
             $media->f_file = $file['filename'];
 
             // in case this didn't get set for some reason
