@@ -232,7 +232,7 @@ class Catalog_Seafile extends Catalog
             return false;
         }
 
-        $sql = "INSERT INTO `{$this->table_name}` (`server_uri`, `api_key`, `library_name`, `api_call_delay`, `catalog_id`) VALUES (?, ?, ?, ?, ?)";
+        $sql = "INSERT INTO `catalog_seafile` (`server_uri`, `api_key`, `library_name`, `api_call_delay`, `catalog_id`) VALUES (?, ?, ?, ?, ?)";
         Dba::write($sql, array($server_uri, $api_key, $library_name, intval($api_call_delay), $catalog_id));
 
         return true;
