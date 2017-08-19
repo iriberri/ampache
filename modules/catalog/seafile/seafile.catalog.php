@@ -138,7 +138,7 @@ class Catalog_Seafile extends Catalog
         return true;
     }
 
-    protected function requestAuthToken($username, $password)
+    private static function request_api_key($server_uri, $username, $password)
     {
         try {
             $data = array('username' => $username, 'password' => $password);
@@ -152,19 +152,18 @@ class Catalog_Seafile extends Catalog
                 )
             );
             $context = stream_context_create($options);
-            $result  = file_get_contents($this->server_uri . '/api2/auth-token/', false, $context);
+            $result  = file_get_contents($server_uri . '/api2/auth-token/', false, $context);
 
             if (!$result) {
                 AmpError::add('general', T_('Error: Could not authenticate against Seafile API.'));
-                $this->request_credentials();
             } else {
                 $token = json_decode($result);
 
-                $this->api_key = $token->token;
+                $api_key = $token->token;
 
                 debug_event('seafile_catalog', 'Retrieved API token for user ' . $username . '.', 1);
 
-                return $this->api_key;
+                return $api_key;
             }
         } catch (Exception $e) {
             AmpError::add('general', sprintf(T_('Error while authenticating against Seafile API: %s', $e->getMessage())));
@@ -217,7 +216,7 @@ class Catalog_Seafile extends Catalog
             return false;
         }
 
-        $api_key = $this->requestAuthToken($username, $password);
+        $api_key = Catalog_Seafile::request_api_key($server_uri, $username, $password);
 
         if ($api_key == null) {
             return false;
