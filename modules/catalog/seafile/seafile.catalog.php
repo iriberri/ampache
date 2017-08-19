@@ -127,44 +127,15 @@ class Catalog_Seafile extends Catalog
         $fields['server_uri']     = array('description' => T_('Server URI'), 'type' => 'text', 'value' => 'https://seafile.example.org/');
         $fields['library_name']   = array('description' => T_('Library Name'), 'type' => 'text', 'value' => 'Music');
         $fields['api_call_delay'] = array('description' => T_('API Call Delay'), 'type' => 'number', 'value' => '250');
+        $fields['username']       = array('description' => T_('Seafile Username'), 'Type' => 'text', 'value' => '' );
+        $fields['password']       = array('description' => T_('Seafile Password'), 'Type' => 'password', 'value' => '' );
 
         return $fields;
     }
 
     public function isReady()
     {
-        return (!empty($this->api_key));
-    }
-
-    public function show_ready_process()
-    {
-        $this->request_credentials();
-    }
-
-    protected function request_credentials()
-    {
-        echo '<br />' . T_('Enter Seafile Username and Password') . '<br />';
-        echo "<form action='" . get_current_path() . "' method='post' enctype='multipart/form-data'>";
-        if ($_REQUEST['action']) {
-            echo "<input type='hidden' name='action' value='" . scrub_in($_REQUEST['action']) . "' />";
-            echo "<input type='hidden' name='catalogs[]' value='" . $this->id . "' />";
-        }
-        echo "<input type='hidden' name='perform_ready' value='true' />";
-
-        echo T_("Username/Email") . ": <input type='text' name='seafileusername' required /> ";
-        echo T_("Password") . ": <input type='password' name='seafilepassword' required /> ";
-
-        echo "<input type='submit' value='" . T_("Connect to Seafile") . "' />";
-        echo "</form>";
-        echo "<br />";
-    }
-
-    public function perform_ready()
-    {
-        $password = $_REQUEST['seafilepassword'];
-        $username = $_REQUEST['seafileusername'];
-
-        $this->requestAuthToken($username, $password);
+        return true;
     }
 
     protected function requestAuthToken($username, $password)
@@ -193,13 +164,14 @@ class Catalog_Seafile extends Catalog
 
                 debug_event('seafile_catalog', 'Retrieved API token for user ' . $username . '.', 1);
 
-                $sql = "UPDATE `{$this->table_name}` SET `api_key` = ? WHERE `catalog_id` = ?";
-                Dba::write($sql, array($this->api_key, $this->id));
+                return $this->api_key;
             }
         } catch (Exception $e) {
             AmpError::add('general', sprintf(T_('Error while authenticating against Seafile API: %s', $e->getMessage())));
             debug_event('seafile_catalog', 'Exception while Authenticating: ' . $e->getMessage(), 2);
         }
+
+        return null;
     }
 
     /**
@@ -210,9 +182,10 @@ class Catalog_Seafile extends Catalog
     public static function create_type($catalog_id, $data)
     {
         $server_uri     = rtrim(trim($data['server_uri']), '/');
-        $api_key        = trim($data['api_key']);
         $library_name   = trim($data['library_name']);
         $api_call_delay = trim($data['api_call_delay']);
+        $username       = trim($data['username']);
+        $password       = trim($data['password']);
 
         if (!strlen($server_uri)) {
             AmpError::add('general', T_('Error: Seafile Server URL is required.'));
@@ -226,9 +199,27 @@ class Catalog_Seafile extends Catalog
             return false;
         }
 
+        if (!strlen($username)) {
+            AmpError::add('general', T_('Error: Seafile Username is required.'));
+
+            return false;
+        }
+
+        if (!strlen($password)) {
+            AmpError::add('general', T_('Error: Seafile Password is required.'));
+
+            return false;
+        }
+
         if (!is_numeric($api_call_delay)) {
             AmpError::add('general', T_('Error: API Call Delay must have a numeric value.'));
 
+            return false;
+        }
+
+        $api_key = $this->requestAuthToken($username, $password);
+
+        if ($api_key == null) {
             return false;
         }
 
