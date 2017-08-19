@@ -127,8 +127,8 @@ class Catalog_Seafile extends Catalog
         $fields['server_uri']     = array('description' => T_('Server URI'), 'type' => 'text', 'value' => 'https://seafile.example.org/');
         $fields['library_name']   = array('description' => T_('Library Name'), 'type' => 'text', 'value' => 'Music');
         $fields['api_call_delay'] = array('description' => T_('API Call Delay'), 'type' => 'number', 'value' => '250');
-        $fields['username']       = array('description' => T_('Seafile Username'), 'Type' => 'text', 'value' => '' );
-        $fields['password']       = array('description' => T_('Seafile Password'), 'Type' => 'password', 'value' => '' );
+        $fields['username']       = array('description' => T_('Seafile Username'), 'type' => 'text', 'value' => '' );
+        $fields['password']       = array('description' => T_('Seafile Password'), 'type' => 'password', 'value' => '' );
 
         return $fields;
     }
