@@ -182,7 +182,7 @@ class Catalog_Seafile extends Catalog
         }
 
         try {
-            $api_key = Seafile::request_api_key($server_uri, $username, $password)
+            $api_key = Seafile::request_api_key($server_uri, $username, $password);
 
             debug_event('seafile_catalog', 'Retrieved API token for user ' . $username . '.', 1);
         } catch (Exception $e) {
