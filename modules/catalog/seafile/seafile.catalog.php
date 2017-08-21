@@ -313,7 +313,7 @@ class Catalog_Seafile extends Catalog
         return false;
     }
 
-    private function download_metadata($file)
+    private function download_metadata($file, $sort_pattern = '', $rename_pattern = '', $gather_types = null)
     {
         // Check for patterns
         if (!$sort_pattern or !$rename_pattern) {
@@ -325,7 +325,7 @@ class Catalog_Seafile extends Catalog
 
         $tempfilename = $this->seafile->download_partial($file);
 
-        $vainfo = new vainfo($tempfilename, $this->get_gather_types('music'), '', '', '', '', '', true);
+        $vainfo = new vainfo($tempfilename, $gather_types || $this->get_gather_types('music'), '', '', '', $sort_pattern, $rename_pattern, true);
         $vainfo->forceSize($file->size);
         $vainfo->get_info();
 
@@ -379,7 +379,7 @@ class Catalog_Seafile extends Catalog
                 } else {
                     debug_event('seafile-verify', 'removing song', 5, 'ampache-catalog');
                     UI::update_text('', sprintf(T_('Removing song "%s"'), $row['title']));
-                    $dead++;
+                    //$dead++;
                     Dba::write('DELETE FROM `song` WHERE `id` = ?', array($row['id']));
                 }
             }
@@ -398,7 +398,7 @@ class Catalog_Seafile extends Catalog
             $file = $this->seafile->get_file($fileinfo['path'], $fileinfo['filename']);
 
             if ($file !== null) {
-                return $this->download_metadata($fileinfo['path'], $matches[0]);
+                return $this->download_metadata($matches[0], $sort_pattern, $rename_pattern, $gather_types);
             }
         }
 
