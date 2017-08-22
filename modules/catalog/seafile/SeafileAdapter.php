@@ -263,7 +263,7 @@ class SeafileAdapter
 
     public function get_format_string()
     {
-        return 'Seafile server "' . $this->server . '", library "' . $this->library_name;
+        return 'Seafile server "' . $this->server . '", library "' . $this->library_name . '"';
     }
 }
 
