@@ -83,7 +83,7 @@ class SeafileAdapter
     }
 
     // create API client object & find library
-    private function prepare()
+    public function prepare()
     {
         if($this->client !== null) {
             return true;
