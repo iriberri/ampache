@@ -206,7 +206,7 @@ class SeafileAdapter
                     if ($item->type == 'dir') {
                         $count += $this->for_all_files($func, $path . $item->name . '/');
                     } elseif ($item->type == 'file') {
-                        $count += $this->add_file($item, $path);
+                        $count += $func($item);
                     }
                 }
             }
