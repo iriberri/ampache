@@ -219,7 +219,7 @@ class Catalog_Seafile extends Catalog
     {
         $arr = $this->seafile->from_virtual_path($file_path);
 
-        return $arr['path'] . "/" . $arr['filename']
+        return $arr['path'] . "/" . $arr['filename'];
     }
 
     /**
@@ -238,11 +238,11 @@ class Catalog_Seafile extends Catalog
 
         $success = false;
 
-        if($this->seafile->prepare())
-        {
-            $count = $this->seafile->for_all_files(function($file) {
+        if ($this->seafile->prepare()) {
+            $count = $this->seafile->for_all_files(function ($file) {
                 if ($file->size == 0) {
                     debug_event('read', $file->name . " ignored, 0 bytes", 5);
+
                     return 0;
                 }
 
@@ -350,7 +350,7 @@ class Catalog_Seafile extends Catalog
 
         set_time_limit(0);
 
-        if($this->seafile->prepare()) {
+        if ($this->seafile->prepare()) {
             $sql        = 'SELECT `id`, `file`, `title` FROM `song` WHERE `catalog` = ?';
             $db_results = Dba::read($sql, array($this->id));
             while ($row = Dba::fetch_assoc($db_results)) {
@@ -392,7 +392,7 @@ class Catalog_Seafile extends Catalog
 
     public function get_media_tags($media, $gather_types, $sort_pattern, $rename_pattern)
     {
-        if($this->seafile->prepare()) {
+        if ($this->seafile->prepare()) {
             $fileinfo = $this->seafile->from_virtual_path($media->file);
 
             $file = $this->seafile->get_file($fileinfo['path'], $fileinfo['filename']);
@@ -416,7 +416,7 @@ class Catalog_Seafile extends Catalog
 
         set_time_limit(0);
 
-        if($this->seafile->prepare()) {
+        if ($this->seafile->prepare()) {
             $sql        = 'SELECT `id`, `file` FROM `song` WHERE `catalog` = ?';
             $db_results = Dba::read($sql, array($this->id));
             while ($row = Dba::fetch_assoc($db_results)) {

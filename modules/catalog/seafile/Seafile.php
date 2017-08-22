@@ -66,10 +66,10 @@ class Seafile
 
     public function __construct($server_uri, $library_name, $call_delay, $api_key)
     {
-        $this->server = $server_uri;
-        $this->library_name = $library_name;
-        $this->api_key = $api_key;
-        $this->call_delay = $call_delay;
+        $this->server          = $server_uri;
+        $this->library_name    = $library_name;
+        $this->api_key         = $api_key;
+        $this->call_delay      = $call_delay;
         $this->directory_cache = array();
     }
 
@@ -85,12 +85,13 @@ class Seafile
     // create API client object & find library
     private function prepare()
     {
-        if($this->client !== null) {
+        if ($this->client !== null) {
             return true;
         }
 
         if (!$this->ready()) {
             $this->client = null;
+
             return false;
         }
 
@@ -121,6 +122,7 @@ class Seafile
 
         if (count($matches) == 0) {
             AmpError::add('general', sprintf(T_('No media updated: could not find Seafile library called "%s"'), $this->library_name));
+
             return false;
         }
 
@@ -178,10 +180,12 @@ class Seafile
                     return $this->client['Directories']->getAll($this->library, $path);
                 });
                 $this->directory_cache[$path] = $directory;
+
                 return $directory;
             } catch (ClientException $e) {
                 if ($e->getResponse()->getStatusCode() == 404) {
                     $this->directory_cache[$path] = false;
+
                     return null;
                 } else {
                     throw $e;
@@ -194,7 +198,7 @@ class Seafile
     // the function receives a DirectoryItem and should return 1 if the file was added, 0 otherwise
     // (https://github.com/rene-s/Seafile-PHP-SDK/blob/master/src/Type/DirectoryItem.php)
     // Returns number added, or -1 on failure
-    public funtion for_all_files($func, $path = '/')
+    public function for_all_files($func, $path = '/')
     {
         if ($this->client != null) {
             $directoryItems = $this->get_cached_directory($path);
@@ -241,8 +245,7 @@ class Seafile
 
         if ($partial) {
             $opts = ['curl' => [ CURLOPT_RANGE => '0-2097152' ]];
-        }
-        else {
+        } else {
             $opts = [ 'delay' => 0 ];
         }
         // grab a full 2 meg in case meta has image in it or something
@@ -266,6 +269,3 @@ class Seafile
         return 'Seafile server "' . $this->server . '", library "' . $this->library_name;
     }
 }
-
-
-?>
