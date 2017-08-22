@@ -324,7 +324,7 @@ class Catalog_Seafile extends Catalog
 
         debug_event('seafile_catalog', 'Downloading partial song ' . $file->name, 5);
 
-        $tempfilename = $this->seafile->download_partial($file);
+        $tempfilename = $this->seafile->download($file, true);
 
         $vainfo = new vainfo($tempfilename, $gather_types || $this->get_gather_types('music'), '', '', '', $sort_pattern, $rename_pattern, true);
         $vainfo->forceSize($file->size);
