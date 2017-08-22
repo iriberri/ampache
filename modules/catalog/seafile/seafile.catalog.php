@@ -27,7 +27,7 @@
  *
  */
 
-use \SeafileAdapter;
+require_once('SeafileAdapter.php');
 
 class Catalog_Seafile extends Catalog
 {
