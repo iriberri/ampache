@@ -27,6 +27,7 @@
  *
  */
 
+use Seafile;
 
 class Catalog_Seafile extends Catalog
 {
