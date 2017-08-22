@@ -212,7 +212,7 @@ class Catalog_Seafile extends Catalog
             $this->id = intval($catalog_id);
             $info     = $this->get_info($catalog_id);
 
-            $this->seafile = new Seafile($info['server_uri'], $info['library_name'], $info['api_call_delay'], $info['api_key']);
+            $this->seafile = new SeafileAdapter($info['server_uri'], $info['library_name'], $info['api_call_delay'], $info['api_key']);
         }
     }
 
