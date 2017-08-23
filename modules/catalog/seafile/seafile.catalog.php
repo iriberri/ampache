@@ -357,7 +357,7 @@ class Catalog_Seafile extends Catalog
             while ($row = Dba::fetch_assoc($db_results)) {
                 $results['total']++;
                 debug_event('seafile-verify', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5, 'ampache-catalog');
-                $fileinfo = $this->from_virtual_path($row['file']);
+                $fileinfo = $this->seafile->from_virtual_path($row['file']);
 
                 $file = $this->seafile->get_file($fileinfo['path'], $fileinfo['filename']);
 
