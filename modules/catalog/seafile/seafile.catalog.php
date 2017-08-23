@@ -326,7 +326,11 @@ class Catalog_Seafile extends Catalog
 
         $tempfilename = $this->seafile->download($file, true);
 
-        $vainfo = new vainfo($tempfilename, $gather_types || $this->get_gather_types('music'), '', '', '', $sort_pattern, $rename_pattern, true);
+        if ($gather_types === null) {
+            $gather_types = $this->get_gather_types('music');
+        }
+
+        $vainfo = new vainfo($tempfilename, $gather_types, '', '', '', $sort_pattern, $rename_pattern, true);
         $vainfo->forceSize($file->size);
         $vainfo->get_info();
 
