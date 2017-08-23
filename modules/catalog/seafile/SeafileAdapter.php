@@ -171,7 +171,13 @@ class SeafileAdapter
     private function get_cached_directory($path)
     {
         if (array_key_exists($path, $this->directory_cache)) {
-            return $this->directory_cache[$path] || null;
+            $directory = $this->directory_cache[$path];
+
+            if ($directory) {
+                return $directory;
+            } else {
+                return null;
+            }
         } else {
             try {
                 $directory = $this->throttle_check(function () use ($path) {
