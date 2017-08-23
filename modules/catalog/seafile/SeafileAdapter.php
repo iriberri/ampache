@@ -219,7 +219,7 @@ class SeafileAdapter
 
     public function get_file($path, $name)
     {
-        $directoryItems = $this->get_cached_directory($path);
+        $directory = $this->get_cached_directory($path);
 
         if ($directory) {
             foreach ($directory as $file) {
