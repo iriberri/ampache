@@ -422,7 +422,7 @@ class Catalog_Seafile extends Catalog
             $db_results = Dba::read($sql, array($this->id));
             while ($row = Dba::fetch_assoc($db_results)) {
                 debug_event('seafile-clean', 'Starting work on ' . $row['file'] . '(' . $row['id'] . ')', 5);
-                $file     = $this->from_virtual_path($row['file']);
+                $file     = $this->seafile->from_virtual_path($row['file']);
 
                 try {
                     $exists = $this->seafile->get_file($file['path'], $file['filename']) !== null;
