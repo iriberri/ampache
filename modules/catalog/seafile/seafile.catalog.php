@@ -364,7 +364,7 @@ class Catalog_Seafile extends Catalog
                 $metadata = null;
 
                 if ($file !== null) {
-                    $metadata = $this->download_metadata($fileinfo['path'], $file);
+                    $metadata = $this->download_metadata($file);
                 }
 
                 if ($metadata !== null) {
