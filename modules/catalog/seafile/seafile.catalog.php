@@ -486,18 +486,18 @@ class Catalog_Seafile extends Catalog
         if ($this->seafile->prepare()) {
             set_time_limit(0);
 
-            $file = $this->seafile->from_virtual_path($media->file);
+            $fileinfo = $this->seafile->from_virtual_path($media->file);
 
             $file = $this->seafile->get_file($fileinfo['path'], $fileinfo['filename']);
 
             $tempfile = $this->seafile->download($file);
 
-            $media->file   = $output;
-            $media->f_file = $file['filename'];
+            $media->file   = $tempfile;
+            $media->f_file = $fileinfo['filename'];
 
             // in case this didn't get set for some reason
             if ($media->size == 0) {
-                $media->size = Core::get_filesize($output);
+                $media->size = Core::get_filesize($tempfile);
             }
         }
 
