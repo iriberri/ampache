@@ -138,20 +138,20 @@ class SeafileAdapter
             try {
                 return $func();
             } catch (ClientException $e) {
-                if ($e->getResponse()->getStatusCode() == 429) {
-                    $resp = $e->getResponse()->getBody();
-
-                    $error = json_decode($result)->detail;
-
-                    preg_match('(\d+) sec', $error, $matches);
-
-                    $secs = intval($matches[1][0]);
-
-                    debug_event('seafile', sprintf('Throttled by Seafile, waiting %d seconds.', $secs), 5);
-                    sleep($secs + 1);
-                } else {
+                if ($e->getResponse()->getStatusCode() !== 429) {
                     throw $e;
                 }
+
+                $resp = $e->getResponse()->getBody();
+
+                $error = json_decode($resp)->detail;
+
+                preg_match('(\d+) sec', $error, $matches);
+
+                $secs = intval($matches[1][0]);
+
+                debug_event('seafile', sprintf('Throttled by Seafile, waiting %d seconds.', $secs), 5);
+                sleep($secs + 1);
             }
         }
     }

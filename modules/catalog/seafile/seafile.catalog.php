@@ -403,7 +403,7 @@ class Catalog_Seafile extends Catalog
             $file = $this->seafile->get_file($fileinfo['path'], $fileinfo['filename']);
 
             if ($file !== null) {
-                return $this->download_metadata($matches[0], $sort_pattern, $rename_pattern, $gather_types);
+                return $this->download_metadata($file, $sort_pattern, $rename_pattern, $gather_types);
             }
         }
 
