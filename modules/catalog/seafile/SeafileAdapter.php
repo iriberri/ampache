@@ -66,10 +66,10 @@ class SeafileAdapter
 
     public function __construct($server_uri, $library_name, $call_delay, $api_key)
     {
-        $this->server = $server_uri;
-        $this->library_name = $library_name;
-        $this->api_key = $api_key;
-        $this->call_delay = $call_delay;
+        $this->server          = $server_uri;
+        $this->library_name    = $library_name;
+        $this->api_key         = $api_key;
+        $this->call_delay      = $call_delay;
         $this->directory_cache = array();
     }
 
@@ -85,12 +85,13 @@ class SeafileAdapter
     // create API client object & find library
     public function prepare()
     {
-        if($this->client !== null) {
+        if ($this->client !== null) {
             return true;
         }
 
         if (!$this->ready()) {
             $this->client = null;
+
             return false;
         }
 
@@ -121,6 +122,7 @@ class SeafileAdapter
 
         if (count($matches) == 0) {
             AmpError::add('general', sprintf(T_('No media updated: could not find Seafile library called "%s"'), $this->library_name));
+
             return false;
         }
 
@@ -184,10 +186,12 @@ class SeafileAdapter
                     return $this->client['Directories']->getAll($this->library, $path);
                 });
                 $this->directory_cache[$path] = $directory;
+
                 return $directory;
             } catch (ClientException $e) {
                 if ($e->getResponse()->getStatusCode() == 404) {
                     $this->directory_cache[$path] = false;
+
                     return null;
                 } else {
                     throw $e;
@@ -247,8 +251,7 @@ class SeafileAdapter
 
         if ($partial) {
             $opts = ['curl' => [ CURLOPT_RANGE => '0-2097152' ]];
-        }
-        else {
+        } else {
             $opts = [ 'delay' => 0 ];
         }
         // grab a full 2 meg in case meta has image in it or something
@@ -272,6 +275,3 @@ class SeafileAdapter
         return 'Seafile server "' . $this->server . '", library "' . $this->library_name . '"';
     }
 }
-
-
-?>
