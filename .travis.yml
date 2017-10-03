@@ -16,3 +16,5 @@ before_script:
 script:
  - scripts/tests/syntax.sh
  - scripts/tests/codestyle.sh
+
+
